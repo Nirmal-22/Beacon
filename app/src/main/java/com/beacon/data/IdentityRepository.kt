@@ -9,14 +9,14 @@ import com.beacon.domain.IdGen
  * (SharedPreferences), but the sessionId is regenerated every app process —
  * that is what makes Beacon identities ephemeral by default.
  */
-class IdentityRepository(context: Context) {
+class IdentityRepository(context: Context) : Identity {
 
     private val prefs = context.getSharedPreferences("beacon_identity", Context.MODE_PRIVATE)
 
     /** New every process. */
-    val sessionId: String = IdGen.newSessionId()
+    override val sessionId: String = IdGen.newSessionId()
 
-    var displayName: String
+    override var displayName: String
         get() = prefs.getString(KEY_DISPLAY_NAME, "") ?: ""
         set(value) = prefs.edit { putString(KEY_DISPLAY_NAME, value.trim()) }
 
