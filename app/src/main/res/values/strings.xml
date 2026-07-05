@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Beacon</string>
+    <string name="notification_channel_name">Beacon activity</string>
+    <string name="notification_channel_desc">Shown while Beacon is discovering people nearby</string>
+</resources>
