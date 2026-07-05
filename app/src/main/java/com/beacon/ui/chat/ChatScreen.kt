@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -55,6 +56,7 @@ fun ChatScreen(
     val messages by viewModel.messages.collectAsStateWithLifecycle()
     val peerOnline by viewModel.peerOnline.collectAsStateWithLifecycle()
     val typingName by viewModel.typingName.collectAsStateWithLifecycle()
+    val presenceLine by viewModel.presenceLine.collectAsStateWithLifecycle()
     var input by rememberSaveable { mutableStateOf("") }
     val listState = rememberLazyListState()
 
@@ -76,7 +78,9 @@ fun ChatScreen(
                     Column {
                         Text(title)
                         val subtitle = when {
-                            typingName != null -> "typing…"
+                            typingName != null ->
+                                if (viewModel.isGroupRoom) "$typingName is typing…" else "typing…"
+                            viewModel.isGroupRoom -> presenceLine
                             !peerOnline -> "out of range"
                             else -> null
                         }
@@ -84,7 +88,8 @@ fun ChatScreen(
                             Text(
                                 subtitle,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = if (subtitle == "typing…") {
+                                maxLines = 1,
+                                color = if (typingName != null) {
                                     MaterialTheme.colorScheme.primary
                                 } else {
                                     MaterialTheme.colorScheme.onSurfaceVariant
@@ -96,6 +101,19 @@ fun ChatScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    if (viewModel.isGroupRoom) {
+                        IconButton(onClick = {
+                            viewModel.leaveRoom()
+                            onBack()
+                        }) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ExitToApp,
+                                contentDescription = "Leave room",
+                            )
+                        }
                     }
                 },
             )

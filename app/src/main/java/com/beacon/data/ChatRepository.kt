@@ -33,6 +33,8 @@ class ChatRepository(
     private val identity: Identity,
     scope: CoroutineScope,
     private val alerts: MessageAlerts? = null,
+    /** Resolves group-room recipients (RoomRegistry-backed in production). */
+    private val groupTargets: (roomCode: String) -> List<String> = { emptyList() },
 ) {
 
     /** Room the user is currently looking at — its messages never alert. */
@@ -146,16 +148,15 @@ class ChatRepository(
     )
 
     /**
-     * DM codes embed both session ids, so route to the matching peer only.
-     * Non-dm codes broadcast to the whole mesh until M3 adds ROOM_ANNOUNCE
-     * membership filtering.
+     * DM codes embed both session ids, so route to the matching peer;
+     * group rooms route to whoever currently announces membership.
      */
-    private fun targetsFor(roomCode: String): List<String> {
-        val peers = nearby.peers.value.values
-        return if (roomCode.startsWith("dm:")) {
-            peers.filter { roomCode.contains(it.sessionId) }.map { it.endpointId }
+    private fun targetsFor(roomCode: String): List<String> =
+        if (roomCode.startsWith("dm:")) {
+            nearby.peers.value.values
+                .filter { roomCode.contains(it.sessionId) }
+                .map { it.endpointId }
         } else {
-            peers.map { it.endpointId }
+            groupTargets(roomCode)
         }
-    }
 }

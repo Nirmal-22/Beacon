@@ -3,7 +3,9 @@ package com.beacon
 import android.content.Context
 import com.beacon.data.ChatRepository
 import com.beacon.data.IdentityRepository
+import com.beacon.data.MeshRouter
 import com.beacon.data.db.BeaconDatabase
+import com.beacon.domain.RoomRegistry
 import com.beacon.nearby.NearbyManager
 import com.beacon.service.MessagesNotifier
 import com.beacon.service.PeerAlerter
@@ -28,12 +30,20 @@ class AppContainer(appContext: Context) {
 
     val nearbyManager = NearbyManager(appContext, identityRepository, appScope)
 
+    val roomRegistry = RoomRegistry(identityRepository)
+
+    val meshRouter = MeshRouter(nearbyManager, identityRepository, roomRegistry, appScope)
+
     val chatRepository = ChatRepository(
         dao = database.messageDao(),
         nearby = nearbyManager,
         identity = identityRepository,
         scope = appScope,
-        alerts = MessagesNotifier(appContext),
+        alerts = MessagesNotifier(appContext) { roomCode, sender ->
+            if (roomCode.startsWith("dm:")) sender
+            else roomRegistry.rooms.value[roomCode]?.name ?: sender
+        },
+        groupTargets = { roomCode -> roomRegistry.targetsFor(roomCode) },
     )
 
     /** Chats requested from outside the UI (notification taps). */

@@ -36,6 +36,18 @@ class ChatViewModel(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 
+    val isGroupRoom: Boolean = !roomCode.startsWith("dm:")
+
+    /** Presence line for group rooms: "3 here — Me, A, B". Null for DMs. */
+    val presenceLine: StateFlow<String?> = container.roomRegistry.rooms
+        .map { rooms ->
+            if (!isGroupRoom) return@map null
+            val room = rooms[roomCode] ?: return@map "room ended"
+            val names = room.members.values.sorted()
+            "${names.size} here — ${names.joinToString(", ")}"
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     private val _typingName = MutableStateFlow<String?>(null)
     val typingName: StateFlow<String?> = _typingName.asStateFlow()
 
@@ -74,6 +86,11 @@ class ChatViewModel(
 
     fun send(text: String) {
         viewModelScope.launch { repo.send(roomCode, text) }
+    }
+
+    /** Leave a group room; the caller navigates back. */
+    fun leaveRoom() {
+        if (isGroupRoom) container.meshRouter.leaveRoom(roomCode)
     }
 
     private companion object {

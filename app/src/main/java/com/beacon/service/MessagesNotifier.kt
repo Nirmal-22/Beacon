@@ -15,7 +15,12 @@ import com.beacon.data.MessageAlerts
  * One notification per room (id = roomCode hash); tapping it deep-opens that
  * chat via MainActivity intent extras.
  */
-class MessagesNotifier(private val context: Context) : MessageAlerts {
+class MessagesNotifier(
+    private val context: Context,
+    /** Room code + sender -> notification title (room name for group rooms). */
+    private val titleResolver: (roomCode: String, senderName: String) -> String =
+        { _, sender -> sender },
+) : MessageAlerts {
 
     private val manager = context.getSystemService(NotificationManager::class.java)
 
@@ -30,20 +35,22 @@ class MessagesNotifier(private val context: Context) : MessageAlerts {
     }
 
     override fun onNewMessage(roomCode: String, senderName: String, text: String, unreadCount: Int) {
+        val title = titleResolver(roomCode, senderName)
+        val isGroup = !roomCode.startsWith("dm:")
         val tapIntent = PendingIntent.getActivity(
             context,
             roomCode.hashCode(),
             Intent(context, MainActivity::class.java).apply {
                 putExtra(MainActivity.EXTRA_ROOM_CODE, roomCode)
-                putExtra(MainActivity.EXTRA_ROOM_TITLE, senderName)
+                putExtra(MainActivity.EXTRA_ROOM_TITLE, title)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle(senderName)
-            .setContentText(text)
+            .setContentTitle(title)
+            .setContentText(if (isGroup) "$senderName: $text" else text)
             .setNumber(unreadCount)
             .setSubText(if (unreadCount > 1) "$unreadCount new messages" else null)
             .setContentIntent(tapIntent)

@@ -5,7 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.beacon.AppContainer
 import com.beacon.domain.AnonymousNames
 import com.beacon.domain.IdGen
+import com.beacon.domain.RoomRegistry
 import com.beacon.model.Peer
+import com.beacon.model.RoomInfo
 import com.beacon.nearby.NearbyManager
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -22,8 +24,17 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
 
     val anonymous: StateFlow<Boolean> = container.identityRepository.anonymous
 
-    /** Unread message count keyed by room code. */
+    /** Unread message count keyed by room code (dm:* and group rooms alike). */
     val unreadCounts: StateFlow<Map<String, Int>> = container.chatRepository.unreadCounts
+
+    /** Rooms I'm in, then rooms announced nearby that I could join. */
+    val myRooms: StateFlow<List<RoomInfo>> = container.roomRegistry.rooms
+        .map { rooms -> rooms.values.filter { it.isJoined }.sortedBy { it.name.lowercase() } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val nearbyRooms: StateFlow<List<RoomInfo>> = container.roomRegistry.rooms
+        .map { rooms -> rooms.values.filter { !it.isJoined }.sortedBy { it.name.lowercase() } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val anonymousHandle: String
         get() = AnonymousNames.forSession(container.identityRepository.sessionId)
@@ -31,6 +42,12 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
     fun setAnonymous(value: Boolean) {
         container.identityRepository.setAnonymous(value)
         container.nearbyManager.refreshIdentity()
+    }
+
+    /** Create-or-join by human name; returns the room code to navigate to. */
+    fun joinRoom(nameOrCode: String): String {
+        container.meshRouter.joinRoom(nameOrCode)
+        return RoomRegistry.codeFor(nameOrCode)
     }
 
     /** DM room code shared by both devices without negotiation. */
