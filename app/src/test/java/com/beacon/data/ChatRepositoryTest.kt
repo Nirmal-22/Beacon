@@ -30,6 +30,15 @@ private class FakeDao : MessageDao {
         state.value = rows.values.toList()
     }
 
+    override suspend fun markReadByPeer(roomCode: String, upToTs: Long) {
+        rows.replaceAll { _, m ->
+            if (m.roomCode == roomCode && m.isMine && m.timestamp <= upToTs) {
+                m.copy(readByPeer = true, delivered = true)
+            } else m
+        }
+        state.value = rows.values.toList()
+    }
+
     override fun messagesFor(roomCode: String): Flow<List<MessageEntity>> =
         state.map { list -> list.filter { it.roomCode == roomCode }.sortedBy { it.timestamp } }
 
@@ -210,6 +219,67 @@ class ChatRepositoryTest {
 
         val delivered = repo.messagesFor("dm:a:b").first { list -> list.any { it.delivered } }
         assertTrue(delivered.single().delivered)
+    }
+
+    @Test
+    fun `opening a chat sends a READ receipt to the dm peer`() = runTest {
+        val repo = ChatRepository(dao, transport, identity, backgroundScope)
+        val other = Peer("ep-1", "bbbb-remote", "Them", isConnected = true)
+        transport.peers.value = mapOf("ep-1" to other)
+        val dm = IdGen.dmRoomCode(identity.sessionId, other.sessionId)
+
+        repo.markRead(dm)
+
+        val (read, targets) = transport.sent.single()
+        assertEquals(BeaconEnvelope.TYPE_READ, read.type)
+        assertEquals(dm, read.roomCode)
+        assertEquals(listOf("ep-1"), targets)
+    }
+
+    @Test
+    fun `incoming READ marks own messages read up to its timestamp`() = runTest {
+        val repo = ChatRepository(dao, transport, identity, backgroundScope)
+        transport.inbound.subscriptionCount.first { it > 0 }
+        repo.send("dm:a:b", "one")
+        repo.send("dm:a:b", "two")
+
+        transport.inbound.emit(
+            "ep-1" to BeaconEnvelope(
+                type = BeaconEnvelope.TYPE_READ,
+                msgId = "r-1",
+                senderId = "bbbb-remote",
+                senderName = "Them",
+                roomCode = "dm:a:b",
+                ts = System.currentTimeMillis() + 1_000,
+            )
+        )
+
+        val messages = repo.messagesFor("dm:a:b").first { list -> list.all { it.readByPeer } }
+        assertEquals(2, messages.size)
+        assertTrue(messages.all { it.delivered && it.readByPeer })
+    }
+
+    @Test
+    fun `message arriving in the open chat is read-receipted immediately`() = runTest {
+        val repo = ChatRepository(dao, transport, identity, backgroundScope)
+        transport.inbound.subscriptionCount.first { it > 0 }
+        repo.activeRoomCode.value = "dm:a:b"
+
+        transport.inbound.emit(
+            "ep-1" to BeaconEnvelope(
+                type = BeaconEnvelope.TYPE_CHAT_MSG,
+                msgId = "m-9",
+                senderId = "bbbb-remote",
+                senderName = "Them",
+                roomCode = "dm:a:b",
+                ts = 1,
+                body = "hi",
+            )
+        )
+        repo.messagesFor("dm:a:b").first { it.isNotEmpty() }
+
+        val types = transport.sent.map { it.first.type }
+        assertEquals(listOf(BeaconEnvelope.TYPE_ACK, BeaconEnvelope.TYPE_READ), types)
     }
 
     @Test

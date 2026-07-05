@@ -9,4 +9,5 @@ data class ChatMessage(
     val timestamp: Long,
     val isMine: Boolean,
     val delivered: Boolean,
+    val readByPeer: Boolean,
 )

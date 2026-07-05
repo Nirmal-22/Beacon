@@ -18,4 +18,6 @@ data class MessageEntity(
     val isMine: Boolean,
     /** Only meaningful for own messages: true once a peer ACKed receipt. */
     val delivered: Boolean = false,
+    /** Only meaningful for own messages: true once a peer viewed the chat. */
+    val readByPeer: Boolean = false,
 )

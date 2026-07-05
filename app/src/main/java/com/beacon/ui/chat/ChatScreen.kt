@@ -37,9 +37,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.graphics.Color
 import com.beacon.model.ChatMessage
 import java.text.DateFormat
 import java.util.Date
+
+/** Fixed so "read" looks the same on every phone regardless of Material You. */
+private val ReadBlue = Color(0xFF34B7F1)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -182,11 +186,14 @@ private fun MessageBubble(message: ChatMessage) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     if (message.isMine) {
+                        // WhatsApp convention: ✓ sent, ✓✓ delivered, blue ✓✓ read.
+                        // ReadBlue is a fixed color on purpose — monochrome system
+                        // palettes (Nothing OS) would otherwise hide the read state.
                         Text(
-                            if (message.delivered) " ✓✓" else " ✓",
+                            if (message.delivered || message.readByPeer) " ✓✓" else " ✓",
                             style = MaterialTheme.typography.labelSmall,
-                            color = if (message.delivered) {
-                                MaterialTheme.colorScheme.primary
+                            color = if (message.readByPeer) {
+                                ReadBlue
                             } else {
                                 MaterialTheme.colorScheme.onSurfaceVariant
                             },

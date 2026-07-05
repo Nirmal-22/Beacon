@@ -19,6 +19,13 @@ interface MessageDao {
     @Query("UPDATE messages SET delivered = 1 WHERE msgId = :msgId")
     suspend fun markDelivered(msgId: String)
 
+    /** Read receipts cover everything own up to the reader's timestamp. */
+    @Query(
+        "UPDATE messages SET readByPeer = 1, delivered = 1 " +
+            "WHERE roomCode = :roomCode AND isMine = 1 AND timestamp <= :upToTs"
+    )
+    suspend fun markReadByPeer(roomCode: String, upToTs: Long)
+
     @Query("DELETE FROM messages WHERE roomCode = :roomCode")
     suspend fun deleteRoom(roomCode: String)
 

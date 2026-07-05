@@ -32,6 +32,12 @@ data class BeaconEnvelope(
         /** Delivery receipt: [body] is the msgId of the CHAT_MSG being acknowledged. */
         const val TYPE_ACK = "ACK"
 
+        /**
+         * Read receipt: sender has *seen* [roomCode] on screen. Everything the
+         * receiver sent in that room up to [ts] counts as read.
+         */
+        const val TYPE_READ = "READ"
+
         /** Sender is typing in [roomCode]; receivers show it briefly, no reply needed. */
         const val TYPE_TYPING = "TYPING"
 

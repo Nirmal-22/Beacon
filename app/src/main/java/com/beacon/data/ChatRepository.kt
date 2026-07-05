@@ -47,6 +47,10 @@ class ChatRepository(
                 when (envelope.type) {
                     BeaconEnvelope.TYPE_CHAT_MSG -> onChatMessage(endpointId, envelope)
                     BeaconEnvelope.TYPE_ACK -> envelope.body?.let { dao.markDelivered(it) }
+                    BeaconEnvelope.TYPE_READ -> envelope.roomCode?.let {
+                        // Peer clock skew can under-mark; the next receipt catches up.
+                        dao.markReadByPeer(it, envelope.ts)
+                    }
                 }
             }
             .launchIn(scope)
@@ -75,12 +79,17 @@ class ChatRepository(
             val count = _unread.value.getOrDefault(roomCode, 0) + 1
             _unread.update { it + (roomCode to count) }
             alerts?.onNewMessage(roomCode, envelope.senderName, text, count)
+        } else {
+            // Chat is on screen — the sender gets a read receipt right away.
+            nearby.send(envelope(BeaconEnvelope.TYPE_READ, roomCode), listOf(endpointId))
         }
     }
 
     fun markRead(roomCode: String) {
         _unread.update { it - roomCode }
         alerts?.onRead(roomCode)
+        // Tell the room everything up to now has been seen.
+        nearby.send(envelope(BeaconEnvelope.TYPE_READ, roomCode), targetsFor(roomCode))
     }
 
     fun messagesFor(roomCode: String): Flow<List<ChatMessage>> =
@@ -95,6 +104,7 @@ class ChatRepository(
                     timestamp = it.timestamp,
                     isMine = it.isMine,
                     delivered = it.delivered,
+                    readByPeer = it.readByPeer,
                 )
             }
         }
