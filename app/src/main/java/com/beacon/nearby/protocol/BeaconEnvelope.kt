@@ -52,5 +52,11 @@ data class BeaconEnvelope(
 
         /** Reply to an icebreaker: [body] is "accept" or "decline" (M5). */
         const val TYPE_ICEBREAKER_REPLY = "ICEBREAKER_REPLY"
+
+        /** Help request: [body] is a HelpPostPayload JSON (M6). */
+        const val TYPE_HELP_POST = "HELP_POST"
+
+        /** Poster withdrew a help request: [body] is its id (M6). */
+        const val TYPE_HELP_CANCEL = "HELP_CANCEL"
     }
 }

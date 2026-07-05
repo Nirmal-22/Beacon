@@ -9,6 +9,7 @@ import androidx.core.app.NotificationCompat
 import com.beacon.MainActivity
 import com.beacon.R
 import com.beacon.data.MessageAlerts
+import com.beacon.domain.HelpBoard
 
 /**
  * Heads-up notifications for chat messages arriving outside the open chat.
@@ -85,6 +86,27 @@ class MessagesNotifier(
             .setCategory(NotificationCompat.CATEGORY_SOCIAL)
             .build()
         manager.notify(roomCode.hashCode(), notification)
+    }
+
+    /** Someone nearby asked for help — the whole point of pillar 2. */
+    fun onHelpPost(post: HelpBoard.HelpPost) {
+        val tapIntent = PendingIntent.getActivity(
+            context,
+            post.id.hashCode(),
+            Intent(context, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle("${post.category.emoji} ${post.posterName} needs help nearby")
+            .setContentText(post.text)
+            .setContentIntent(tapIntent)
+            .setAutoCancel(true)
+            .setCategory(NotificationCompat.CATEGORY_SOCIAL)
+            .build()
+        manager.notify(post.id.hashCode(), notification)
     }
 
     private companion object {

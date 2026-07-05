@@ -24,6 +24,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
@@ -49,11 +50,13 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,13 +67,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.beacon.domain.HelpBoard
+import com.beacon.domain.HelpCategory
 import com.beacon.domain.IntentTag
 import com.beacon.model.Peer
 import com.beacon.model.RoomInfo
 import com.beacon.nearby.NearbyManager
 import com.beacon.service.BeaconService
+import kotlinx.coroutines.delay
 
-private enum class HomeTab { PEOPLE, ROOMS }
+private enum class HomeTab { PEOPLE, ROOMS, HELP }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -88,6 +94,8 @@ fun HomeScreen(
     var menuOpen by remember { mutableStateOf(false) }
     var tab by rememberSaveable { mutableStateOf(HomeTab.PEOPLE) }
     var createRoomOpen by remember { mutableStateOf(false) }
+    var postHelpOpen by remember { mutableStateOf(false) }
+    val helpPosts by viewModel.helpPosts.collectAsStateWithLifecycle()
     val radarOn = status == NearbyManager.Status.ACTIVE
 
     val dmUnread = unread.filterKeys { it.startsWith("dm:") }.values.sum()
@@ -161,13 +169,28 @@ fun HomeScreen(
                     },
                     label = { Text("Rooms") },
                 )
+                NavigationBarItem(
+                    selected = tab == HomeTab.HELP,
+                    onClick = { tab = HomeTab.HELP },
+                    icon = {
+                        CountBadge(helpPosts.count { it.posterId != viewModel.mySessionId }) {
+                            Icon(Icons.Default.Campaign, contentDescription = null)
+                        }
+                    },
+                    label = { Text("Help") },
+                )
             }
         },
         floatingActionButton = {
-            if (tab == HomeTab.ROOMS && radarOn) {
-                FloatingActionButton(onClick = { createRoomOpen = true }) {
+            when {
+                !radarOn -> Unit
+                tab == HomeTab.ROOMS -> FloatingActionButton(onClick = { createRoomOpen = true }) {
                     Icon(Icons.Default.Add, contentDescription = "Create room")
                 }
+                tab == HomeTab.HELP -> FloatingActionButton(onClick = { postHelpOpen = true }) {
+                    Icon(Icons.Default.Add, contentDescription = "Ask for help")
+                }
+                else -> Unit
             }
         },
     ) { padding ->
@@ -182,7 +205,8 @@ fun HomeScreen(
             when {
                 !radarOn -> RadarOffState { BeaconService.start(context) }
                 tab == HomeTab.PEOPLE -> PeopleTab(peers, unread, viewModel, onOpenChat)
-                else -> RoomsTab(myRooms, nearbyRooms, unread, viewModel, onOpenChat)
+                tab == HomeTab.ROOMS -> RoomsTab(myRooms, nearbyRooms, unread, viewModel, onOpenChat)
+                else -> HelpTab(helpPosts, viewModel, onOpenChat)
             }
         }
     }
@@ -194,6 +218,15 @@ fun HomeScreen(
                 createRoomOpen = false
                 val code = viewModel.joinRoom(name)
                 onOpenChat(code, name.trim())
+            },
+        )
+    }
+    if (postHelpOpen) {
+        PostHelpDialog(
+            onDismiss = { postHelpOpen = false },
+            onPost = { category, text, ttl ->
+                postHelpOpen = false
+                viewModel.postHelp(category, text, ttl)
             },
         )
     }
@@ -365,6 +398,138 @@ private fun RoomRow(
                     actionIcon != null -> Icon(actionIcon, contentDescription = "Join")
                 }
             },
+        )
+    }
+}
+
+@Composable
+private fun HelpTab(
+    posts: List<HelpBoard.HelpPost>,
+    viewModel: HomeViewModel,
+    onOpenChat: (String, String) -> Unit,
+) {
+    // Re-render countdowns every 30 s.
+    var nowTick by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000)
+            nowTick = System.currentTimeMillis()
+        }
+    }
+
+    if (posts.isEmpty()) {
+        HelpEmptyState()
+        return
+    }
+    LazyColumn {
+        items(posts, key = { it.id }) { post ->
+            val mine = post.posterId == viewModel.mySessionId
+            val minutesLeft = ((post.expiresAt - nowTick) / 60_000L).coerceAtLeast(0)
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+            ) {
+                ListItem(
+                    leadingContent = {
+                        Text(post.category.emoji, style = MaterialTheme.typography.headlineSmall)
+                    },
+                    headlineContent = { Text(post.text) },
+                    supportingContent = {
+                        Text(
+                            (if (mine) "Your request" else post.posterName) +
+                                " · expires in ${minutesLeft}m"
+                        )
+                    },
+                    trailingContent = {
+                        if (mine) {
+                            TextButton(onClick = { viewModel.cancelHelp(post.id) }) {
+                                Text("Cancel")
+                            }
+                        } else {
+                            Button(onClick = {
+                                val dm = viewModel.respondToHelp(post)
+                                onOpenChat(dm, post.posterName)
+                            }) {
+                                Text("I can help")
+                            }
+                        }
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PostHelpDialog(
+    onDismiss: () -> Unit,
+    onPost: (HelpCategory, String, Int) -> Unit,
+) {
+    var category by remember { mutableStateOf(HelpCategory.CHARGER) }
+    var text by remember { mutableStateOf("") }
+    var ttl by remember { mutableStateOf(15f) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Ask people nearby") },
+        text = {
+            Column {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    HelpCategory.entries.forEach { c ->
+                        FilterChip(
+                            selected = category == c,
+                            onClick = { category = c },
+                            label = { Text("${c.emoji} ${c.label}") },
+                        )
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { if (it.length <= 120) text = it },
+                    label = { Text("What do you need?") },
+                    placeholder = { Text("USB-C charger for 20 minutes?") },
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "Disappears after ${ttl.toInt()} minutes",
+                    style = MaterialTheme.typography.labelMedium,
+                )
+                Slider(value = ttl, onValueChange = { ttl = it }, valueRange = 10f..30f)
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onPost(category, text, ttl.toInt()) },
+                enabled = text.isNotBlank(),
+            ) { Text("Post") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+@Composable
+private fun HelpEmptyState() {
+    CenteredState {
+        Icon(
+            Icons.Default.Campaign,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(48.dp),
+        )
+        Spacer(Modifier.height(16.dp))
+        Text("Nobody needs help right now", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Need a charger, someone to watch your bag, one more player? " +
+                "Post with + — only people within range see it, and it expires on its own.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

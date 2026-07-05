@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.beacon.AppContainer
 import com.beacon.domain.AnonymousNames
+import com.beacon.domain.HelpBoard
+import com.beacon.domain.HelpCategory
 import com.beacon.domain.IdGen
 import com.beacon.domain.IntentTag
 import com.beacon.domain.RoomRegistry
@@ -43,6 +45,19 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
     val peerIntents: StateFlow<Map<String, IntentTag>> = container.intentBoard.peerIntents
 
     fun setIntent(tag: IntentTag?) = container.meshRouter.setIntent(tag)
+
+    val helpPosts: StateFlow<List<HelpBoard.HelpPost>> = container.helpBoard.posts
+
+    val mySessionId: String get() = container.identityRepository.sessionId
+
+    fun postHelp(category: HelpCategory, text: String, ttlMinutes: Int) =
+        container.meshRouter.postHelp(category, text, ttlMinutes)
+
+    fun cancelHelp(id: String) = container.meshRouter.cancelHelp(id)
+
+    /** @return the dm room code to open with the poster. */
+    fun respondToHelp(post: HelpBoard.HelpPost): String =
+        container.meshRouter.respondToHelp(post)
 
     val anonymousHandle: String
         get() = AnonymousNames.forSession(container.identityRepository.sessionId)

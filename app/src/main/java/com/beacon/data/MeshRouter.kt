@@ -1,6 +1,8 @@
 package com.beacon.data
 
 import com.beacon.domain.DmGate
+import com.beacon.domain.HelpBoard
+import com.beacon.domain.HelpCategory
 import com.beacon.domain.IdGen
 import com.beacon.domain.IntentBoard
 import com.beacon.domain.IntentTag
@@ -12,9 +14,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 
-/** UI-facing alert for social events that arrive while the app is elsewhere. */
-fun interface SocialAlerts {
+/** UI-facing alerts for social events that arrive while the app is elsewhere. */
+interface SocialAlerts {
     fun onIcebreaker(peer: Peer, emoji: String, dmRoomCode: String)
+    fun onHelpPost(post: HelpBoard.HelpPost)
 }
 
 /**
@@ -28,6 +31,7 @@ class MeshRouter(
     private val rooms: RoomRegistry,
     private val intents: IntentBoard,
     private val gate: DmGate,
+    private val help: HelpBoard,
     scope: CoroutineScope,
     private val alerts: SocialAlerts? = null,
 ) {
@@ -46,9 +50,13 @@ class MeshRouter(
                 knownEndpoints = current.keys
                 left.forEach { rooms.onDisconnected(it) }
                 if (arrived.isNotEmpty()) {
-                    nearby.send(envelope(BeaconEnvelope.TYPE_ROOM_ANNOUNCE, rooms.announceBody()), arrived.toList())
+                    val list = arrived.toList()
+                    nearby.send(envelope(BeaconEnvelope.TYPE_ROOM_ANNOUNCE, rooms.announceBody()), list)
                     intents.myIntent.value?.let { tag ->
-                        nearby.send(envelope(BeaconEnvelope.TYPE_INTENT, tag.key), arrived.toList())
+                        nearby.send(envelope(BeaconEnvelope.TYPE_INTENT, tag.key), list)
+                    }
+                    help.myActivePayloads().forEach { payload ->
+                        nearby.send(envelope(BeaconEnvelope.TYPE_HELP_POST, payload.encode()), list)
                     }
                 }
             }
@@ -77,6 +85,15 @@ class MeshRouter(
 
             BeaconEnvelope.TYPE_ICEBREAKER_REPLY ->
                 gate.onReplyReceived(env.senderId, env.body == "accept")
+
+            BeaconEnvelope.TYPE_HELP_POST -> {
+                val before = help.posts.value.map { it.id }.toSet()
+                help.onRemotePost(env.senderId, env.senderName, env.body)
+                help.posts.value.firstOrNull { it.id !in before }?.let { alerts?.onHelpPost(it) }
+            }
+
+            BeaconEnvelope.TYPE_HELP_CANCEL ->
+                help.onRemoteCancel(env.senderId, env.body)
         }
     }
 
@@ -101,6 +118,25 @@ class MeshRouter(
     fun replyIcebreaker(peerSessionId: String, accepted: Boolean) {
         gate.onLocalReply(peerSessionId, accepted)
         sendToSession(peerSessionId, BeaconEnvelope.TYPE_ICEBREAKER_REPLY, if (accepted) "accept" else "decline")
+    }
+
+    fun postHelp(category: HelpCategory, text: String, ttlMinutes: Int) {
+        val payload = help.createPost(category, text, ttlMinutes)
+        broadcast(BeaconEnvelope.TYPE_HELP_POST, payload.encode())
+    }
+
+    fun cancelHelp(id: String) {
+        if (help.cancel(id)) broadcast(BeaconEnvelope.TYPE_HELP_CANCEL, id)
+    }
+
+    /**
+     * Responding to a help post implies chat consent: both sides' gates open
+     * and the caller navigates into the DM.
+     */
+    fun respondToHelp(post: HelpBoard.HelpPost): String {
+        gate.unlock(post.posterId)
+        sendToSession(post.posterId, BeaconEnvelope.TYPE_ICEBREAKER, "🙋")
+        return IdGen.dmRoomCode(identity.sessionId, post.posterId)
     }
 
     /** Membership changed — every connected peer gets the fresh snapshot. */
