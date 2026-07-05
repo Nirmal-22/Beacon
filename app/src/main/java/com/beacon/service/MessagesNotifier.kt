@@ -64,6 +64,29 @@ class MessagesNotifier(
         manager.cancel(roomCode.hashCode())
     }
 
+    /** Someone tapped an icebreaker at us — high-priority, opens their chat. */
+    fun onIcebreaker(senderName: String, emoji: String, roomCode: String) {
+        val tapIntent = PendingIntent.getActivity(
+            context,
+            roomCode.hashCode(),
+            Intent(context, MainActivity::class.java).apply {
+                putExtra(MainActivity.EXTRA_ROOM_CODE, roomCode)
+                putExtra(MainActivity.EXTRA_ROOM_TITLE, senderName)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle("$senderName wants to chat $emoji")
+            .setContentText("Open to accept or decline")
+            .setContentIntent(tapIntent)
+            .setAutoCancel(true)
+            .setCategory(NotificationCompat.CATEGORY_SOCIAL)
+            .build()
+        manager.notify(roomCode.hashCode(), notification)
+    }
+
     private companion object {
         const val CHANNEL_ID = "beacon_messages"
     }

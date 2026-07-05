@@ -3,6 +3,8 @@ package com.beacon.ui.chat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.beacon.AppContainer
+import com.beacon.domain.DmGate
+import com.beacon.domain.DmGate.Entry
 import com.beacon.model.ChatMessage
 import com.beacon.nearby.protocol.BeaconEnvelope
 import kotlinx.coroutines.Job
@@ -37,6 +39,31 @@ class ChatViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 
     val isGroupRoom: Boolean = !roomCode.startsWith("dm:")
+
+    /** The other side's sessionId for DMs (dm:<a>:<b>); null for group rooms. */
+    private val dmPeerId: String? =
+        if (isGroupRoom) null
+        else roomCode.split(":").drop(1)
+            .firstOrNull { it != container.identityRepository.sessionId }
+
+    /** Icebreaker gate for this DM; group rooms are always open. */
+    val gate: StateFlow<DmGate.Entry> = container.dmGate.entries
+        .map { entries ->
+            if (dmPeerId == null) Entry(DmGate.State.UNLOCKED)
+            else entries[dmPeerId] ?: Entry(DmGate.State.LOCKED)
+        }
+        .stateIn(
+            viewModelScope, SharingStarted.WhileSubscribed(5_000),
+            Entry(if (isGroupRoom) DmGate.State.UNLOCKED else DmGate.State.LOCKED),
+        )
+
+    fun sendIcebreaker(emoji: String) {
+        dmPeerId?.let { container.meshRouter.sendIcebreaker(it, emoji) }
+    }
+
+    fun replyIcebreaker(accepted: Boolean) {
+        dmPeerId?.let { container.meshRouter.replyIcebreaker(it, accepted) }
+    }
 
     /** Presence line for group rooms: "3 here — Me, A, B". Null for DMs. */
     val presenceLine: StateFlow<String?> = container.roomRegistry.rooms

@@ -6,6 +6,8 @@ import com.beacon.data.EphemeralityManager
 import com.beacon.data.IdentityRepository
 import com.beacon.data.MeshRouter
 import com.beacon.data.db.BeaconDatabase
+import com.beacon.domain.DmGate
+import com.beacon.domain.IntentBoard
 import com.beacon.domain.RoomRegistry
 import com.beacon.nearby.NearbyManager
 import com.beacon.service.MessagesNotifier
@@ -33,17 +35,33 @@ class AppContainer(appContext: Context) {
 
     val roomRegistry = RoomRegistry(identityRepository)
 
-    val meshRouter = MeshRouter(nearbyManager, identityRepository, roomRegistry, appScope)
+    val intentBoard = IntentBoard()
+
+    val dmGate = DmGate()
+
+    private val messagesNotifier = MessagesNotifier(appContext) { roomCode, sender ->
+        if (roomCode.startsWith("dm:")) sender
+        else roomRegistry.rooms.value[roomCode]?.name ?: sender
+    }
+
+    val meshRouter = MeshRouter(
+        nearby = nearbyManager,
+        identity = identityRepository,
+        rooms = roomRegistry,
+        intents = intentBoard,
+        gate = dmGate,
+        scope = appScope,
+        alerts = { peer, emoji, dmRoomCode ->
+            messagesNotifier.onIcebreaker(peer.displayName, emoji, dmRoomCode)
+        },
+    )
 
     val chatRepository = ChatRepository(
         dao = database.messageDao(),
         nearby = nearbyManager,
         identity = identityRepository,
         scope = appScope,
-        alerts = MessagesNotifier(appContext) { roomCode, sender ->
-            if (roomCode.startsWith("dm:")) sender
-            else roomRegistry.rooms.value[roomCode]?.name ?: sender
-        },
+        alerts = messagesNotifier,
         groupTargets = { roomCode -> roomRegistry.targetsFor(roomCode) },
     )
 

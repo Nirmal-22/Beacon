@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.beacon.AppContainer
 import com.beacon.domain.AnonymousNames
 import com.beacon.domain.IdGen
+import com.beacon.domain.IntentTag
 import com.beacon.domain.RoomRegistry
 import com.beacon.model.Peer
 import com.beacon.model.RoomInfo
@@ -35,6 +36,13 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
     val nearbyRooms: StateFlow<List<RoomInfo>> = container.roomRegistry.rooms
         .map { rooms -> rooms.values.filter { !it.isJoined }.sortedBy { it.name.lowercase() } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val myIntent: StateFlow<IntentTag?> = container.intentBoard.myIntent
+
+    /** Peer intents keyed by sessionId. */
+    val peerIntents: StateFlow<Map<String, IntentTag>> = container.intentBoard.peerIntents
+
+    fun setIntent(tag: IntentTag?) = container.meshRouter.setIntent(tag)
 
     val anonymousHandle: String
         get() = AnonymousNames.forSession(container.identityRepository.sessionId)

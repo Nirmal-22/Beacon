@@ -18,9 +18,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -39,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.graphics.Color
+import com.beacon.domain.DmGate
 import com.beacon.model.ChatMessage
 import java.text.DateFormat
 import java.util.Date
@@ -57,6 +60,7 @@ fun ChatScreen(
     val peerOnline by viewModel.peerOnline.collectAsStateWithLifecycle()
     val typingName by viewModel.typingName.collectAsStateWithLifecycle()
     val presenceLine by viewModel.presenceLine.collectAsStateWithLifecycle()
+    val gate by viewModel.gate.collectAsStateWithLifecycle()
     var input by rememberSaveable { mutableStateOf("") }
     val listState = rememberLazyListState()
 
@@ -138,33 +142,78 @@ fun ChatScreen(
                     MessageBubble(message)
                 }
             }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                OutlinedTextField(
-                    value = input,
-                    onValueChange = {
-                        input = it
-                        if (it.isNotBlank()) viewModel.onInputChanged()
-                    },
-                    placeholder = { Text("Message") },
-                    modifier = Modifier.weight(1f),
-                    maxLines = 4,
-                )
-                IconButton(
-                    onClick = {
-                        viewModel.send(input)
-                        input = ""
-                    },
-                    enabled = input.isNotBlank(),
+            when (gate.state) {
+                DmGate.State.UNLOCKED -> Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
+                    OutlinedTextField(
+                        value = input,
+                        onValueChange = {
+                            input = it
+                            if (it.isNotBlank()) viewModel.onInputChanged()
+                        },
+                        placeholder = { Text("Message") },
+                        modifier = Modifier.weight(1f),
+                        maxLines = 4,
+                    )
+                    IconButton(
+                        onClick = {
+                            viewModel.send(input)
+                            input = ""
+                        },
+                        enabled = input.isNotBlank(),
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
+                    }
+                }
+
+                DmGate.State.LOCKED -> GatePanel("Break the ice — one tap, they accept, chat opens:") {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        listOf("👍", "☕", "🎮", "📍").forEach { emoji ->
+                            TextButton(onClick = { viewModel.sendIcebreaker(emoji) }) {
+                                Text(emoji, style = MaterialTheme.typography.headlineSmall)
+                            }
+                        }
+                    }
+                }
+
+                DmGate.State.SENT -> GatePanel(
+                    "Icebreaker ${gate.emoji.orEmpty()} sent — waiting for $title to accept…"
+                ) {}
+
+                DmGate.State.RECEIVED -> GatePanel(
+                    "$title wants to chat ${gate.emoji.orEmpty()}"
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Button(onClick = { viewModel.replyIcebreaker(true) }) { Text("Accept") }
+                        TextButton(onClick = {
+                            viewModel.replyIcebreaker(false)
+                            onBack()
+                        }) { Text("Decline") }
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun GatePanel(text: String, content: @Composable () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        content()
     }
 }
 

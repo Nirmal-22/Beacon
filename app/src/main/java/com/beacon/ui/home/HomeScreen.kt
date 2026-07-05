@@ -7,6 +7,8 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.filled.Add
@@ -36,6 +39,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -60,6 +64,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.beacon.domain.IntentTag
 import com.beacon.model.Peer
 import com.beacon.model.RoomInfo
 import com.beacon.nearby.NearbyManager
@@ -210,9 +215,18 @@ private fun PeopleTab(
     viewModel: HomeViewModel,
     onOpenChat: (String, String) -> Unit,
 ) {
+    val myIntent by viewModel.myIntent.collectAsStateWithLifecycle()
+    val peerIntents by viewModel.peerIntents.collectAsStateWithLifecycle()
+
+    IntentChipRow(myIntent) { viewModel.setIntent(it) }
+
     if (peers.isEmpty()) {
         ScanningState()
         return
+    }
+    // Matching intents float to the top — that's the discovery feature.
+    val sorted = peers.sortedByDescending {
+        myIntent != null && peerIntents[it.sessionId] == myIntent
     }
     Text(
         text = "Nearby",
@@ -220,8 +234,10 @@ private fun PeopleTab(
         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
     )
     LazyColumn {
-        items(peers, key = { it.endpointId }) { peer ->
+        items(sorted, key = { it.endpointId }) { peer ->
             val dm = viewModel.dmRoomCodeFor(peer)
+            val intent = peerIntents[peer.sessionId]
+            val matches = myIntent != null && intent == myIntent
             Card(
                 onClick = { onOpenChat(dm, peer.displayName) },
                 modifier = Modifier
@@ -229,14 +245,51 @@ private fun PeopleTab(
                     .padding(horizontal = 16.dp, vertical = 4.dp),
             ) {
                 ListItem(
-                    leadingContent = { Icon(Icons.Default.Person, contentDescription = null) },
+                    leadingContent = {
+                        if (intent != null) {
+                            Text(intent.emoji, style = MaterialTheme.typography.headlineSmall)
+                        } else {
+                            Icon(Icons.Default.Person, contentDescription = null)
+                        }
+                    },
                     headlineContent = { Text(peer.displayName) },
-                    supportingContent = { Text("Tap to chat") },
+                    supportingContent = {
+                        Text(
+                            when {
+                                matches -> "Also here for ${intent!!.label} — say hi!"
+                                intent != null -> "Here for ${intent.label}"
+                                else -> "Tap to chat"
+                            },
+                            color = if (matches) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
                     trailingContent = {
                         unread[dm]?.takeIf { it > 0 }?.let { Badge { Text("$it") } }
                     },
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun IntentChipRow(myIntent: IntentTag?, onSelect: (IntentTag?) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("I'm here for:", style = MaterialTheme.typography.labelMedium)
+        IntentTag.entries.forEach { tag ->
+            FilterChip(
+                selected = myIntent == tag,
+                onClick = { onSelect(if (myIntent == tag) null else tag) },
+                label = { Text("${tag.emoji} ${tag.label}") },
+            )
         }
     }
 }

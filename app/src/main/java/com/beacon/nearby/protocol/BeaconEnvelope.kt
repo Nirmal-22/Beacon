@@ -43,5 +43,14 @@ data class BeaconEnvelope(
 
         /** Full snapshot of the sender's room memberships (M3). */
         const val TYPE_ROOM_ANNOUNCE = "ROOM_ANNOUNCE"
+
+        /** Sender's current intent tag key; empty body clears it (M5). */
+        const val TYPE_INTENT = "INTENT"
+
+        /** Icebreaker tap: [body] is the chosen emoji (M5). */
+        const val TYPE_ICEBREAKER = "ICEBREAKER"
+
+        /** Reply to an icebreaker: [body] is "accept" or "decline" (M5). */
+        const val TYPE_ICEBREAKER_REPLY = "ICEBREAKER_REPLY"
     }
 }
