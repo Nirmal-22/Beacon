@@ -6,18 +6,19 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
+import com.beacon.ui.navigation.BeaconNavHost
 import com.beacon.ui.theme.BeaconTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        val container = (application as BeaconApp).container
         setContent {
             BeaconTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    Text("Hello Beacon")
+                    BeaconNavHost(container)
                 }
             }
         }

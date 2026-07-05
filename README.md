@@ -75,4 +75,12 @@ Scope discipline is a feature.
 
 ## Status
 
-Early — repo scaffolding and design docs. Android app (Kotlin + Jetpack Compose + Nearby Connections API) to follow.
+**M0–M2 code complete** (branch `feat/m0-m2`) — Kotlin + Jetpack Compose app with:
+
+- Gradle scaffold: AGP 9.1.1, built-in Kotlin 2.3.21, Compose BOM 2026.06.00, compileSdk 37 / minSdk 26.
+- Staged permission onboarding (version-gated for API 26 → 33+).
+- Nearby Connections full-mesh discovery + auto-connect (`P2P_CLUSTER`), foreground service with live peer-count notification.
+- 1:1 chat over a JSON wire protocol, persisted in Room with idempotent message IDs.
+- 18 JVM unit tests (protocol codec, connection tie-break, chat repository).
+
+Next: the M1/M2 device checkpoints (two physical phones discovering each other and chatting — see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)), then M3 Temporary Rooms.
