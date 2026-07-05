@@ -3,6 +3,7 @@ package com.beacon.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.beacon.AppContainer
+import com.beacon.domain.AnonymousNames
 import com.beacon.domain.IdGen
 import com.beacon.model.Peer
 import com.beacon.nearby.NearbyManager
@@ -19,7 +20,18 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
 
     val status: StateFlow<NearbyManager.Status> = container.nearbyManager.status
 
-    val myDisplayName: String get() = container.identityRepository.displayName
+    val anonymous: StateFlow<Boolean> = container.identityRepository.anonymous
+
+    /** Unread message count keyed by room code. */
+    val unreadCounts: StateFlow<Map<String, Int>> = container.chatRepository.unreadCounts
+
+    val anonymousHandle: String
+        get() = AnonymousNames.forSession(container.identityRepository.sessionId)
+
+    fun setAnonymous(value: Boolean) {
+        container.identityRepository.setAnonymous(value)
+        container.nearbyManager.refreshIdentity()
+    }
 
     /** DM room code shared by both devices without negotiation. */
     fun dmRoomCodeFor(peer: Peer): String =

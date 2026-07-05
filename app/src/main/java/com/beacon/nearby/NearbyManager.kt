@@ -90,6 +90,18 @@ class NearbyManager(
 
     fun sendToAll(envelope: BeaconEnvelope) = send(envelope, _peers.value.keys.toList())
 
+    /**
+     * Re-advertise and re-introduce after the local identity changed (e.g.
+     * anonymous mode toggled): new endpointInfo for future discoverers, fresh
+     * HELLO so already-connected peers update the name they show.
+     */
+    fun refreshIdentity() {
+        if (_status.value != Status.ACTIVE) return
+        client.stopAdvertising()
+        startAdvertising()
+        _peers.value.keys.forEach { sendHello(it) }
+    }
+
     private fun startAdvertising() {
         client.startAdvertising(
             identity.endpointInfo(),
@@ -203,7 +215,7 @@ class NearbyManager(
                 type = BeaconEnvelope.TYPE_HELLO,
                 msgId = IdGen.newMessageId(),
                 senderId = identity.sessionId,
-                senderName = identity.displayName,
+                senderName = identity.effectiveName,
                 ts = System.currentTimeMillis(),
             ),
             listOf(endpointId),

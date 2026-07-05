@@ -29,6 +29,12 @@ data class BeaconEnvelope(
         /** Chat text; [roomCode] is set (dm:* codes for 1:1 chats). */
         const val TYPE_CHAT_MSG = "CHAT_MSG"
 
+        /** Delivery receipt: [body] is the msgId of the CHAT_MSG being acknowledged. */
+        const val TYPE_ACK = "ACK"
+
+        /** Sender is typing in [roomCode]; receivers show it briefly, no reply needed. */
+        const val TYPE_TYPING = "TYPING"
+
         /** Full snapshot of the sender's room memberships (M3). */
         const val TYPE_ROOM_ANNOUNCE = "ROOM_ANNOUNCE"
     }

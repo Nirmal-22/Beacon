@@ -16,4 +16,6 @@ data class MessageEntity(
     val text: String,
     val timestamp: Long,
     val isMine: Boolean,
+    /** Only meaningful for own messages: true once a peer ACKed receipt. */
+    val delivered: Boolean = false,
 )

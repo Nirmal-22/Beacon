@@ -2,7 +2,11 @@ package com.beacon.data
 
 import android.content.Context
 import androidx.core.content.edit
+import com.beacon.domain.AnonymousNames
 import com.beacon.domain.IdGen
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Ephemeral identity: the display name and onboarding flag survive restarts
@@ -24,10 +28,22 @@ class IdentityRepository(context: Context) : Identity {
         get() = prefs.getBoolean(KEY_ONBOARDING_COMPLETE, false)
         set(value) = prefs.edit { putBoolean(KEY_ONBOARDING_COMPLETE, value) }
 
-    fun endpointInfo(): String = IdGen.encodeEndpointInfo(sessionId, displayName)
+    private val _anonymous = MutableStateFlow(prefs.getBoolean(KEY_ANONYMOUS, false))
+    val anonymous: StateFlow<Boolean> = _anonymous.asStateFlow()
+
+    fun setAnonymous(value: Boolean) {
+        _anonymous.value = value
+        prefs.edit { putBoolean(KEY_ANONYMOUS, value) }
+    }
+
+    override val effectiveName: String
+        get() = if (_anonymous.value) AnonymousNames.forSession(sessionId) else displayName
+
+    fun endpointInfo(): String = IdGen.encodeEndpointInfo(sessionId, effectiveName)
 
     private companion object {
         const val KEY_DISPLAY_NAME = "display_name"
         const val KEY_ONBOARDING_COMPLETE = "onboarding_complete"
+        const val KEY_ANONYMOUS = "anonymous"
     }
 }

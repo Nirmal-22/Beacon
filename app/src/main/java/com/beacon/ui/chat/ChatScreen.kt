@@ -1,8 +1,9 @@
 package com.beacon.ui.chat
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -34,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.beacon.model.ChatMessage
 import java.text.DateFormat
@@ -48,11 +50,19 @@ fun ChatScreen(
 ) {
     val messages by viewModel.messages.collectAsStateWithLifecycle()
     val peerOnline by viewModel.peerOnline.collectAsStateWithLifecycle()
+    val typingName by viewModel.typingName.collectAsStateWithLifecycle()
     var input by rememberSaveable { mutableStateOf("") }
     val listState = rememberLazyListState()
 
+    // While this chat is visible its messages don't notify; unread clears.
+    LifecycleResumeEffect(Unit) {
+        viewModel.setActive(true)
+        onPauseOrDispose { viewModel.setActive(false) }
+    }
+
+    // Reversed list: index 0 is the newest message, pinned to the bottom.
     LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.lastIndex)
+        if (messages.isNotEmpty()) listState.animateScrollToItem(0)
     }
 
     Scaffold(
@@ -61,11 +71,20 @@ fun ChatScreen(
                 title = {
                     Column {
                         Text(title)
-                        if (!peerOnline) {
+                        val subtitle = when {
+                            typingName != null -> "typing…"
+                            !peerOnline -> "out of range"
+                            else -> null
+                        }
+                        if (subtitle != null) {
                             Text(
-                                "out of range",
+                                subtitle,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = if (subtitle == "typing…") {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
                             )
                         }
                     }
@@ -86,13 +105,14 @@ fun ChatScreen(
         ) {
             LazyColumn(
                 state = listState,
+                reverseLayout = true,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
+                contentPadding = PaddingValues(12.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                items(messages, key = { it.msgId }) { message ->
+                items(messages.asReversed(), key = { it.msgId }) { message ->
                     MessageBubble(message)
                 }
             }
@@ -104,7 +124,10 @@ fun ChatScreen(
             ) {
                 OutlinedTextField(
                     value = input,
-                    onValueChange = { input = it },
+                    onValueChange = {
+                        input = it
+                        if (it.isNotBlank()) viewModel.onInputChanged()
+                    },
                     placeholder = { Text("Message") },
                     modifier = Modifier.weight(1f),
                     maxLines = 4,
@@ -130,7 +153,7 @@ private fun MessageBubble(message: ChatMessage) {
         if (message.isMine) MaterialTheme.colorScheme.primaryContainer
         else MaterialTheme.colorScheme.surfaceVariant
 
-    androidx.compose.foundation.layout.Box(
+    Box(
         modifier = Modifier.fillMaxWidth(),
         contentAlignment = align,
     ) {
@@ -148,12 +171,28 @@ private fun MessageBubble(message: ChatMessage) {
                     )
                 }
                 Text(message.text, style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(message.timestamp)),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                Row(
                     modifier = Modifier.align(Alignment.End),
-                )
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        DateFormat.getTimeInstance(DateFormat.SHORT)
+                            .format(Date(message.timestamp)),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (message.isMine) {
+                        Text(
+                            if (message.delivered) " ✓✓" else " ✓",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (message.delivered) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
+                }
             }
         }
     }

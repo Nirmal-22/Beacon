@@ -33,6 +33,15 @@ fun BeaconNavHost(container: AppContainer) {
     val start: Any =
         if (container.identityRepository.onboardingComplete) HomeRoute else OnboardingRoute
 
+    // Notification taps land here and open the requested chat.
+    LaunchedEffect(Unit) {
+        container.pendingChatOpens.collect { route ->
+            if (container.identityRepository.onboardingComplete) {
+                navController.navigate(route)
+            }
+        }
+    }
+
     NavHost(navController = navController, startDestination = start) {
         composable<OnboardingRoute> {
             OnboardingScreen(identity = container.identityRepository) {

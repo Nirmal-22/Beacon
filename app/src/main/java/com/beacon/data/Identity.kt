@@ -4,4 +4,7 @@ package com.beacon.data
 interface Identity {
     val sessionId: String
     val displayName: String
+
+    /** What peers see: the display name, or an anonymous handle when hidden. */
+    val effectiveName: String get() = displayName
 }

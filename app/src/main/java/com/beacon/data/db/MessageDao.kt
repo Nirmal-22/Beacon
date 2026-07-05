@@ -16,6 +16,9 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE roomCode = :roomCode ORDER BY timestamp ASC")
     fun messagesFor(roomCode: String): Flow<List<MessageEntity>>
 
+    @Query("UPDATE messages SET delivered = 1 WHERE msgId = :msgId")
+    suspend fun markDelivered(msgId: String)
+
     @Query("DELETE FROM messages WHERE roomCode = :roomCode")
     suspend fun deleteRoom(roomCode: String)
 

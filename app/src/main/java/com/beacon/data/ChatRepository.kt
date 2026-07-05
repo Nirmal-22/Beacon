@@ -8,9 +8,19 @@ import com.beacon.nearby.MeshTransport
 import com.beacon.nearby.protocol.BeaconEnvelope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.update
+
+/** UI-facing alerts for messages that arrive outside the open chat. */
+interface MessageAlerts {
+    fun onNewMessage(roomCode: String, senderName: String, text: String, unreadCount: Int)
+    fun onRead(roomCode: String)
+}
 
 /**
  * One chat pipeline for everything: a 1:1 conversation is just a room whose
@@ -22,28 +32,55 @@ class ChatRepository(
     private val nearby: MeshTransport,
     private val identity: Identity,
     scope: CoroutineScope,
+    private val alerts: MessageAlerts? = null,
 ) {
+
+    /** Room the user is currently looking at — its messages never alert. */
+    val activeRoomCode = MutableStateFlow<String?>(null)
+
+    private val _unread = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val unreadCounts: StateFlow<Map<String, Int>> = _unread.asStateFlow()
 
     init {
         nearby.inbound
-            .onEach { (_, envelope) ->
-                if (envelope.type == BeaconEnvelope.TYPE_CHAT_MSG) {
-                    val roomCode = envelope.roomCode ?: return@onEach
-                    val text = envelope.body ?: return@onEach
-                    dao.insert(
-                        MessageEntity(
-                            msgId = envelope.msgId,
-                            roomCode = roomCode,
-                            senderId = envelope.senderId,
-                            senderName = envelope.senderName,
-                            text = text,
-                            timestamp = envelope.ts,
-                            isMine = false,
-                        )
-                    )
+            .onEach { (endpointId, envelope) ->
+                when (envelope.type) {
+                    BeaconEnvelope.TYPE_CHAT_MSG -> onChatMessage(endpointId, envelope)
+                    BeaconEnvelope.TYPE_ACK -> envelope.body?.let { dao.markDelivered(it) }
                 }
             }
             .launchIn(scope)
+    }
+
+    private suspend fun onChatMessage(endpointId: String, envelope: BeaconEnvelope) {
+        val roomCode = envelope.roomCode ?: return
+        val text = envelope.body ?: return
+        dao.insert(
+            MessageEntity(
+                msgId = envelope.msgId,
+                roomCode = roomCode,
+                senderId = envelope.senderId,
+                senderName = envelope.senderName,
+                text = text,
+                timestamp = envelope.ts,
+                isMine = false,
+            )
+        )
+        // Delivery receipt back to the sender.
+        nearby.send(
+            envelope(BeaconEnvelope.TYPE_ACK, roomCode, body = envelope.msgId),
+            listOf(endpointId),
+        )
+        if (activeRoomCode.value != roomCode) {
+            val count = _unread.value.getOrDefault(roomCode, 0) + 1
+            _unread.update { it + (roomCode to count) }
+            alerts?.onNewMessage(roomCode, envelope.senderName, text, count)
+        }
+    }
+
+    fun markRead(roomCode: String) {
+        _unread.update { it - roomCode }
+        alerts?.onRead(roomCode)
     }
 
     fun messagesFor(roomCode: String): Flow<List<ChatMessage>> =
@@ -57,6 +94,7 @@ class ChatRepository(
                     text = it.text,
                     timestamp = it.timestamp,
                     isMine = it.isMine,
+                    delivered = it.delivered,
                 )
             }
         }
@@ -64,31 +102,38 @@ class ChatRepository(
     suspend fun send(roomCode: String, text: String) {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return
-        val envelope = BeaconEnvelope(
-            type = BeaconEnvelope.TYPE_CHAT_MSG,
-            msgId = IdGen.newMessageId(),
-            senderId = identity.sessionId,
-            senderName = identity.displayName,
-            roomCode = roomCode,
-            ts = System.currentTimeMillis(),
-            body = trimmed,
-        )
+        val env = envelope(BeaconEnvelope.TYPE_CHAT_MSG, roomCode, body = trimmed)
         // Local echo first so the UI updates instantly even with no one in range.
         dao.insert(
             MessageEntity(
-                msgId = envelope.msgId,
+                msgId = env.msgId,
                 roomCode = roomCode,
-                senderId = envelope.senderId,
-                senderName = envelope.senderName,
+                senderId = env.senderId,
+                senderName = env.senderName,
                 text = trimmed,
-                timestamp = envelope.ts,
+                timestamp = env.ts,
                 isMine = true,
             )
         )
-        nearby.send(envelope, targetsFor(roomCode))
+        nearby.send(env, targetsFor(roomCode))
+    }
+
+    /** Fire-and-forget "I'm typing" signal; receivers time it out themselves. */
+    fun sendTyping(roomCode: String) {
+        nearby.send(envelope(BeaconEnvelope.TYPE_TYPING, roomCode), targetsFor(roomCode))
     }
 
     suspend fun deleteRoom(roomCode: String) = dao.deleteRoom(roomCode)
+
+    private fun envelope(type: String, roomCode: String, body: String? = null) = BeaconEnvelope(
+        type = type,
+        msgId = IdGen.newMessageId(),
+        senderId = identity.sessionId,
+        senderName = identity.effectiveName,
+        roomCode = roomCode,
+        ts = System.currentTimeMillis(),
+        body = body,
+    )
 
     /**
      * DM codes embed both session ids, so route to the matching peer only.

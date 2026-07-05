@@ -32,6 +32,10 @@ class BeaconService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
         val container = (application as BeaconApp).container
 
         val notification = notifications.buildServiceNotification(
@@ -64,6 +68,8 @@ class BeaconService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
+        const val ACTION_STOP = "com.beacon.action.STOP"
+
         fun start(context: Context) {
             ContextCompat.startForegroundService(
                 context, Intent(context, BeaconService::class.java)

@@ -5,9 +5,13 @@ import com.beacon.data.ChatRepository
 import com.beacon.data.IdentityRepository
 import com.beacon.data.db.BeaconDatabase
 import com.beacon.nearby.NearbyManager
+import com.beacon.service.MessagesNotifier
+import com.beacon.service.PeerAlerter
+import com.beacon.ui.navigation.ChatRoute
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableSharedFlow
 
 /**
  * Manual dependency container — one instance held by [BeaconApp].
@@ -29,5 +33,12 @@ class AppContainer(appContext: Context) {
         nearby = nearbyManager,
         identity = identityRepository,
         scope = appScope,
+        alerts = MessagesNotifier(appContext),
     )
+
+    /** Chats requested from outside the UI (notification taps). */
+    val pendingChatOpens = MutableSharedFlow<ChatRoute>(extraBufferCapacity = 4)
+
+    @Suppress("unused") // alive for its side effect: the new-peer sonar ping
+    private val peerAlerter = PeerAlerter(appContext, nearbyManager.peers, appScope)
 }

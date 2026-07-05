@@ -8,4 +8,5 @@ data class ChatMessage(
     val text: String,
     val timestamp: Long,
     val isMine: Boolean,
+    val delivered: Boolean,
 )

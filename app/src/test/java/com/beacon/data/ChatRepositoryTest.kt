@@ -25,6 +25,11 @@ private class FakeDao : MessageDao {
         state.value = rows.values.toList()
     }
 
+    override suspend fun markDelivered(msgId: String) {
+        rows[msgId]?.let { rows[msgId] = it.copy(delivered = true) }
+        state.value = rows.values.toList()
+    }
+
     override fun messagesFor(roomCode: String): Flow<List<MessageEntity>> =
         state.map { list -> list.filter { it.roomCode == roomCode }.sortedBy { it.timestamp } }
 
@@ -132,6 +137,79 @@ class ChatRepositoryTest {
 
         val messages = repo.messagesFor("dm:a:b").first { list -> list.any { it.msgId == "sentinel" } }
         assertEquals(2, messages.size)
+    }
+
+    @Test
+    fun `inbound message is ACKed to its sender and counts as unread`() = runTest {
+        val repo = ChatRepository(dao, transport, identity, backgroundScope)
+        transport.inbound.subscriptionCount.first { it > 0 }
+
+        transport.inbound.emit(
+            "ep-1" to BeaconEnvelope(
+                type = BeaconEnvelope.TYPE_CHAT_MSG,
+                msgId = "m-1",
+                senderId = "bbbb-remote",
+                senderName = "Them",
+                roomCode = "dm:a:b",
+                ts = 1,
+                body = "hi",
+            )
+        )
+        repo.messagesFor("dm:a:b").first { it.isNotEmpty() }
+
+        val (ack, targets) = transport.sent.single()
+        assertEquals(BeaconEnvelope.TYPE_ACK, ack.type)
+        assertEquals("m-1", ack.body)
+        assertEquals(listOf("ep-1"), targets)
+        assertEquals(mapOf("dm:a:b" to 1), repo.unreadCounts.value)
+
+        repo.markRead("dm:a:b")
+        assertTrue(repo.unreadCounts.value.isEmpty())
+    }
+
+    @Test
+    fun `messages for the open chat are not counted unread`() = runTest {
+        val repo = ChatRepository(dao, transport, identity, backgroundScope)
+        transport.inbound.subscriptionCount.first { it > 0 }
+        repo.activeRoomCode.value = "dm:a:b"
+
+        transport.inbound.emit(
+            "ep-1" to BeaconEnvelope(
+                type = BeaconEnvelope.TYPE_CHAT_MSG,
+                msgId = "m-2",
+                senderId = "bbbb-remote",
+                senderName = "Them",
+                roomCode = "dm:a:b",
+                ts = 1,
+                body = "hi",
+            )
+        )
+        repo.messagesFor("dm:a:b").first { it.isNotEmpty() }
+
+        assertTrue(repo.unreadCounts.value.isEmpty())
+    }
+
+    @Test
+    fun `ACK marks the original message delivered`() = runTest {
+        val repo = ChatRepository(dao, transport, identity, backgroundScope)
+        transport.inbound.subscriptionCount.first { it > 0 }
+        repo.send("dm:a:b", "hello")
+        val sentId = transport.sent.single().first.msgId
+
+        transport.inbound.emit(
+            "ep-1" to BeaconEnvelope(
+                type = BeaconEnvelope.TYPE_ACK,
+                msgId = "ack-1",
+                senderId = "bbbb-remote",
+                senderName = "Them",
+                roomCode = "dm:a:b",
+                ts = 2,
+                body = sentId,
+            )
+        )
+
+        val delivered = repo.messagesFor("dm:a:b").first { list -> list.any { it.delivered } }
+        assertTrue(delivered.single().delivered)
     }
 
     @Test

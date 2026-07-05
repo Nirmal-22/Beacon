@@ -30,6 +30,12 @@ class NotificationHelper(private val context: Context) {
             Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+        val stopIntent = PendingIntent.getService(
+            context,
+            1,
+            Intent(context, BeaconService::class.java).setAction(BeaconService.ACTION_STOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
         val text = when (peerCount) {
             0 -> "Looking for people nearby…"
             1 -> "1 person nearby"
@@ -40,6 +46,7 @@ class NotificationHelper(private val context: Context) {
             .setContentTitle("Beacon is active")
             .setContentText(text)
             .setContentIntent(contentIntent)
+            .addAction(0, "Stop", stopIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .build()
