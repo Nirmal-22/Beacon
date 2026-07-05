@@ -24,6 +24,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.MoreVert
@@ -96,6 +97,7 @@ fun HomeScreen(
     var createRoomOpen by remember { mutableStateOf(false) }
     var postHelpOpen by remember { mutableStateOf(false) }
     val helpPosts by viewModel.helpPosts.collectAsStateWithLifecycle()
+    val blockedCount by viewModel.blockedCount.collectAsStateWithLifecycle()
     val radarOn = status == NearbyManager.Status.ACTIVE
 
     val dmUnread = unread.filterKeys { it.startsWith("dm:") }.values.sum()
@@ -147,6 +149,18 @@ fun HomeScreen(
                                 viewModel.setAnonymous(!anonymous)
                             },
                         )
+                        if (blockedCount > 0) {
+                            DropdownMenuItem(
+                                text = { Text("Unblock all ($blockedCount)") },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Block, contentDescription = null)
+                                },
+                                onClick = {
+                                    menuOpen = false
+                                    viewModel.unblockAll()
+                                },
+                            )
+                        }
                     }
                 },
             )

@@ -31,11 +31,38 @@ Nearby Connections does not work on emulators — it needs real Bluetooth/Wi-Fi 
 3. Expect: each phone lists the other by display name within ~5–30 s, and the persistent notification shows "1 person nearby".
 4. Useful logcat filter: `adb logcat -s NearbyManager`.
 
-**Checkpoint B — M2 1:1 chat**
+**Checkpoint B — M2 1:1 chat** ✅ verified 2026-07-05
 1. From Checkpoint A, tap the peer on either phone.
 2. Exchange messages both ways — delivery should feel instant; sender sees a local echo immediately.
 3. Kill and relaunch the app: the conversation history must survive (Room DB), and the peer reconnects automatically.
 4. Duplicate check: toggling Bluetooth off/on mid-chat may resend payloads — messages must not duplicate (idempotent msgId).
+
+> Note: since M5, fresh DMs start behind the icebreaker gate — send/accept an
+> icebreaker first, then chat as before.
+
+**Checkpoint C — M3 rooms**
+1. Phone A: Rooms tab → + → create "Demo Cafe". It should appear in B's *Nearby rooms* within seconds, showing "1 person here".
+2. B joins → both chat; presence line in the room shows "2 here — <names>"; sender names appear on bubbles.
+3. Room messages must NOT arrive on a third phone that hasn't joined (if available).
+
+**Checkpoint D — M4 ephemerality**
+1. Both leave the room → it disappears from both Rooms tabs and its messages are purged (reopening a recreated room with the same name starts empty).
+2. DM history older than 24 h is swept (hard to demo live — trust the unit tests, or change the retention constant temporarily).
+
+**Checkpoint E — M5 intent & icebreaker**
+1. Both phones pick ☕ on the People tab → each sees the other float to the top with "Also here for Coffee".
+2. A taps B → picks an icebreaker → B gets the notification → accept → chat unlocks. Decline → A can retry.
+3. Both sending icebreakers at each other simultaneously should unlock without any accept.
+
+**Checkpoint F — M6 help nearby**
+1. B posts 🔌 "USB-C charger?" with a 10-min TTL → A gets a notification and sees it in the Help tab with a countdown.
+2. A taps "I can help" → DM opens directly (no icebreaker needed), B can reply.
+3. B cancels a post → it vanishes from A. Wait past TTL → posts expire on their own.
+4. Turn radar off on B after posting, walk out of range: post should disappear from A only after expiry (no live revocation — known v1 limit).
+
+**Checkpoint G — M7 safety**
+1. A blocks B from the chat menu → B vanishes from A's People list; B's messages/icebreakers/help posts stop arriving.
+2. Home menu → "Unblock all" restores visibility (B may need to reconnect).
 
 ## Architecture crib sheet
 

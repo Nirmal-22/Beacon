@@ -14,14 +14,24 @@ import com.beacon.model.RoomInfo
 import com.beacon.nearby.NearbyManager
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
 class HomeViewModel(private val container: AppContainer) : ViewModel() {
 
-    val peers: StateFlow<List<Peer>> = container.nearbyManager.peers
-        .map { it.values.sortedBy { peer -> peer.displayName.lowercase() } }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val peers: StateFlow<List<Peer>> =
+        combine(container.nearbyManager.peers, container.blockList.blocked) { peers, blocked ->
+            peers.values
+                .filterNot { it.sessionId in blocked }
+                .sortedBy { peer -> peer.displayName.lowercase() }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val blockedCount: StateFlow<Int> = container.blockList.blocked
+        .map { it.size }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    fun unblockAll() = container.blockList.unblockAll()
 
     val status: StateFlow<NearbyManager.Status> = container.nearbyManager.status
 

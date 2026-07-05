@@ -1,6 +1,7 @@
 package com.beacon
 
 import android.content.Context
+import com.beacon.data.BlockList
 import com.beacon.data.ChatRepository
 import com.beacon.data.EphemeralityManager
 import com.beacon.data.IdentityRepository
@@ -46,6 +47,8 @@ class AppContainer(appContext: Context) {
 
     val helpBoard = HelpBoard(identityRepository)
 
+    val blockList = BlockList(appContext)
+
     private val messagesNotifier = MessagesNotifier(appContext) { roomCode, sender ->
         if (roomCode.startsWith("dm:")) sender
         else roomRegistry.rooms.value[roomCode]?.name ?: sender
@@ -68,6 +71,7 @@ class AppContainer(appContext: Context) {
                 messagesNotifier.onHelpPost(post)
             }
         },
+        isBlocked = blockList::isBlocked,
     )
 
     val chatRepository = ChatRepository(
@@ -77,6 +81,7 @@ class AppContainer(appContext: Context) {
         scope = appScope,
         alerts = messagesNotifier,
         groupTargets = { roomCode -> roomRegistry.targetsFor(roomCode) },
+        isBlocked = blockList::isBlocked,
     )
 
     /** Chats requested from outside the UI (notification taps). */

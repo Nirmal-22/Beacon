@@ -35,6 +35,7 @@ class ChatRepository(
     private val alerts: MessageAlerts? = null,
     /** Resolves group-room recipients (RoomRegistry-backed in production). */
     private val groupTargets: (roomCode: String) -> List<String> = { emptyList() },
+    private val isBlocked: (sessionId: String) -> Boolean = { false },
 ) {
 
     /** Room the user is currently looking at — its messages never alert. */
@@ -46,6 +47,7 @@ class ChatRepository(
     init {
         nearby.inbound
             .onEach { (endpointId, envelope) ->
+                if (isBlocked(envelope.senderId)) return@onEach
                 when (envelope.type) {
                     BeaconEnvelope.TYPE_CHAT_MSG -> onChatMessage(endpointId, envelope)
                     BeaconEnvelope.TYPE_ACK -> envelope.body?.let { dao.markDelivered(it) }

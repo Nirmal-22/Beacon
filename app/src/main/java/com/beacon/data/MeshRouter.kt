@@ -34,6 +34,7 @@ class MeshRouter(
     private val help: HelpBoard,
     scope: CoroutineScope,
     private val alerts: SocialAlerts? = null,
+    private val isBlocked: (sessionId: String) -> Boolean = { false },
 ) {
 
     private var knownEndpoints = emptySet<String>()
@@ -64,6 +65,7 @@ class MeshRouter(
     }
 
     private fun route(endpointId: String, env: BeaconEnvelope) {
+        if (isBlocked(env.senderId)) return
         when (env.type) {
             BeaconEnvelope.TYPE_ROOM_ANNOUNCE ->
                 rooms.onAnnounce(endpointId, env.senderId, env.senderName, env.body)

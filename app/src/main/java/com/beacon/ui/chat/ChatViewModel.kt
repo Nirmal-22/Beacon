@@ -65,6 +65,14 @@ class ChatViewModel(
         dmPeerId?.let { container.meshRouter.replyIcebreaker(it, accepted) }
     }
 
+    /** Block & report (no backend: they vanish and their envelopes drop). */
+    fun blockPeer() {
+        dmPeerId?.let {
+            container.blockList.block(it)
+            repo.markRead(roomCode)
+        }
+    }
+
     /** Presence line for group rooms: "3 here — Me, A, B". Null for DMs. */
     val presenceLine: StateFlow<String?> = container.roomRegistry.rooms
         .map { rooms ->

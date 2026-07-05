@@ -18,7 +18,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -33,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -62,7 +68,32 @@ fun ChatScreen(
     val presenceLine by viewModel.presenceLine.collectAsStateWithLifecycle()
     val gate by viewModel.gate.collectAsStateWithLifecycle()
     var input by rememberSaveable { mutableStateOf("") }
+    var chatMenuOpen by remember { mutableStateOf(false) }
+    var blockConfirmOpen by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
+
+    if (blockConfirmOpen) {
+        AlertDialog(
+            onDismissRequest = { blockConfirmOpen = false },
+            title = { Text("Block $title?") },
+            text = {
+                Text(
+                    "They disappear from your lists and can't message you. " +
+                        "Blocking also reports them on this device."
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    blockConfirmOpen = false
+                    viewModel.blockPeer()
+                    onBack()
+                }) { Text("Block") }
+            },
+            dismissButton = {
+                TextButton(onClick = { blockConfirmOpen = false }) { Text("Cancel") }
+            },
+        )
+    }
 
     // While this chat is visible its messages don't notify; unread clears.
     LifecycleResumeEffect(Unit) {
@@ -116,6 +147,25 @@ fun ChatScreen(
                             Icon(
                                 Icons.AutoMirrored.Filled.ExitToApp,
                                 contentDescription = "Leave room",
+                            )
+                        }
+                    } else {
+                        IconButton(onClick = { chatMenuOpen = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "Menu")
+                        }
+                        DropdownMenu(
+                            expanded = chatMenuOpen,
+                            onDismissRequest = { chatMenuOpen = false },
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Block & report") },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Block, contentDescription = null)
+                                },
+                                onClick = {
+                                    chatMenuOpen = false
+                                    blockConfirmOpen = true
+                                },
                             )
                         }
                     }

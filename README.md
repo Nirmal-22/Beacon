@@ -75,12 +75,12 @@ Scope discipline is a feature.
 
 ## Status
 
-**M0–M2 code complete** (branch `feat/m0-m2`) — Kotlin + Jetpack Compose app with:
+**M0–M7 code complete** (branch `feat/m3-m7`); M1/M2 verified on physical devices. Kotlin + Jetpack Compose, Nearby Connections (`P2P_CLUSTER` full mesh), no backend.
 
-- Gradle scaffold: AGP 9.1.1, built-in Kotlin 2.3.21, Compose BOM 2026.06.00, compileSdk 37 / minSdk 26.
-- Staged permission onboarding (version-gated for API 26 → 33+).
-- Nearby Connections full-mesh discovery + auto-connect (`P2P_CLUSTER`), foreground service with live peer-count notification.
-- 1:1 chat over a JSON wire protocol, persisted in Room with idempotent message IDs.
-- 18 JVM unit tests (protocol codec, connection tie-break, chat repository).
+- **Both pillars built**: Temporary Rooms (create/join by name, presence, dies-when-empty) and Need Help Nearby (10–30 min TTL requests, live feed, respond → chat).
+- Intent broadcast (☕🎮💼🤝📚) with match surfacing + icebreaker-gated DMs.
+- Ephemeral by default: per-session identity, 24 h message expiry, instant purge on room death, anonymous mode.
+- Chat UX: delivered/read ticks (✓ / ✓✓ / blue ✓✓), typing indicator, unread badges, per-chat notifications, sonar ping on new peers, block & report.
+- 50+ JVM unit tests over the pure-Kotlin core (protocol, room registry, gate, help board, ephemerality).
 
-Next: the M1/M2 device checkpoints (two physical phones discovering each other and chatting — see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)), then M3 Temporary Rooms.
+Remaining: on-device checkpoints for M3–M7 ([docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)) and the demo video ([docs/DEMO.md](docs/DEMO.md)).
