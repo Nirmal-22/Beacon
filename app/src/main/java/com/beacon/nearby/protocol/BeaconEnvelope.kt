@@ -58,5 +58,11 @@ data class BeaconEnvelope(
 
         /** Poster withdrew a help request: [body] is its id (M6). */
         const val TYPE_HELP_CANCEL = "HELP_CANCEL"
+
+        /**
+         * Opt-in map position: [body] is "lat,lon"; empty/null body means the
+         * sender stopped sharing and their pin must be removed (map feature).
+         */
+        const val TYPE_LOCATION = "LOCATION"
     }
 }

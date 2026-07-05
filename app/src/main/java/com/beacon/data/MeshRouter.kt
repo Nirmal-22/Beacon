@@ -6,6 +6,7 @@ import com.beacon.domain.HelpCategory
 import com.beacon.domain.IdGen
 import com.beacon.domain.IntentBoard
 import com.beacon.domain.IntentTag
+import com.beacon.domain.LocationBoard
 import com.beacon.domain.RoomRegistry
 import com.beacon.model.Peer
 import com.beacon.nearby.MeshTransport
@@ -32,6 +33,7 @@ class MeshRouter(
     private val intents: IntentBoard,
     private val gate: DmGate,
     private val help: HelpBoard,
+    private val locations: LocationBoard,
     scope: CoroutineScope,
     private val alerts: SocialAlerts? = null,
     private val isBlocked: (sessionId: String) -> Boolean = { false },
@@ -58,6 +60,9 @@ class MeshRouter(
                     }
                     help.myActivePayloads().forEach { payload ->
                         nearby.send(envelope(BeaconEnvelope.TYPE_HELP_POST, payload.encode()), list)
+                    }
+                    locations.myLocationBody()?.let { body ->
+                        nearby.send(envelope(BeaconEnvelope.TYPE_LOCATION, body), list)
                     }
                 }
             }
@@ -96,6 +101,9 @@ class MeshRouter(
 
             BeaconEnvelope.TYPE_HELP_CANCEL ->
                 help.onRemoteCancel(env.senderId, env.body)
+
+            BeaconEnvelope.TYPE_LOCATION ->
+                locations.onRemoteLocation(env.senderId, env.senderName, env.body)
         }
     }
 
@@ -130,6 +138,15 @@ class MeshRouter(
     fun cancelHelp(id: String) {
         if (help.cancel(id)) broadcast(BeaconEnvelope.TYPE_HELP_CANCEL, id)
     }
+
+    /** Fresh GPS fix while sharing — pin it locally and on every peer's map. */
+    fun broadcastMyLocation(lat: Double, lon: Double) {
+        locations.onMyLocation(lat, lon)
+        locations.myLocationBody()?.let { broadcast(BeaconEnvelope.TYPE_LOCATION, it) }
+    }
+
+    /** Stopped sharing — everyone drops my pin now, not after the timeout. */
+    fun clearMyLocation() = broadcast(BeaconEnvelope.TYPE_LOCATION, null)
 
     /**
      * Responding to a help post implies chat consent: both sides' gates open

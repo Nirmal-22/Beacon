@@ -8,6 +8,7 @@ import com.beacon.domain.HelpBoard
 import com.beacon.domain.HelpCategory
 import com.beacon.domain.IdGen
 import com.beacon.domain.IntentTag
+import com.beacon.domain.LocationBoard
 import com.beacon.domain.RoomRegistry
 import com.beacon.model.Peer
 import com.beacon.model.RoomInfo
@@ -68,6 +69,25 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
     /** @return the dm room code to open with the poster. */
     fun respondToHelp(post: HelpBoard.HelpPost): String =
         container.meshRouter.respondToHelp(post)
+
+    // --- Map ---
+
+    val mapSharing: StateFlow<Boolean> = container.locationBoard.sharing
+
+    val mapPins: StateFlow<Map<String, LocationBoard.Pin>> = container.locationBoard.pins
+
+    val myMapPosition: StateFlow<Pair<Double, Double>?> = container.locationBoard.myPosition
+
+    /** Caller must have obtained location permission before enabling. */
+    fun setMapSharing(enabled: Boolean) {
+        container.locationBoard.setSharing(enabled)
+        if (enabled) {
+            container.locationSharer.start()
+        } else {
+            container.locationSharer.stop()
+            container.meshRouter.clearMyLocation()
+        }
+    }
 
     val anonymousHandle: String
         get() = AnonymousNames.forSession(container.identityRepository.sessionId)

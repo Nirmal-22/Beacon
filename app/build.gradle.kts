@@ -66,6 +66,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.play.services)
 
     implementation(libs.play.services.nearby)
+    implementation(libs.osmdroid)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

@@ -64,6 +64,11 @@ Nearby Connections does not work on emulators — it needs real Bluetooth/Wi-Fi 
 1. A blocks B from the chat menu → B vanishes from A's People list; B's messages/icebreakers/help posts stop arriving.
 2. Home menu → "Unblock all" restores visibility (B may need to reconnect).
 
+**Checkpoint H — opt-in map**
+1. Map tab needs no permission to *view*. B flips "Show me on the map" → grants location → B's pin appears on A's map within ~15 s (needs internet for map tiles; GPS works best outdoors).
+2. B flips it off → pin disappears from A immediately. Radio loss instead of a clean off → pin ages out after ~3 min.
+3. A never shares → A appears on nobody's map while chatting normally (visibility is per-person, not reciprocal).
+
 ## Architecture crib sheet
 
 - `nearby/NearbyManager.kt` — advertise + discover simultaneously; connects to every Beacon endpoint found (full mesh, no relay). The simultaneous-connect race is resolved by `IdGen.shouldInitiateConnection` (lexicographically smaller session prefix initiates).

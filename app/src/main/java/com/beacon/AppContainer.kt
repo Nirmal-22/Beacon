@@ -5,12 +5,14 @@ import com.beacon.data.BlockList
 import com.beacon.data.ChatRepository
 import com.beacon.data.EphemeralityManager
 import com.beacon.data.IdentityRepository
+import com.beacon.data.LocationSharer
 import com.beacon.data.MeshRouter
 import com.beacon.data.SocialAlerts
 import com.beacon.data.db.BeaconDatabase
 import com.beacon.domain.DmGate
 import com.beacon.domain.HelpBoard
 import com.beacon.domain.IntentBoard
+import com.beacon.domain.LocationBoard
 import com.beacon.domain.RoomRegistry
 import com.beacon.model.Peer
 import com.beacon.nearby.NearbyManager
@@ -49,6 +51,8 @@ class AppContainer(appContext: Context) {
 
     val blockList = BlockList(appContext)
 
+    val locationBoard = LocationBoard()
+
     private val messagesNotifier = MessagesNotifier(appContext) { roomCode, sender ->
         if (roomCode.startsWith("dm:")) sender
         else roomRegistry.rooms.value[roomCode]?.name ?: sender
@@ -61,6 +65,7 @@ class AppContainer(appContext: Context) {
         intents = intentBoard,
         gate = dmGate,
         help = helpBoard,
+        locations = locationBoard,
         scope = appScope,
         alerts = object : SocialAlerts {
             override fun onIcebreaker(peer: Peer, emoji: String, dmRoomCode: String) {
@@ -90,11 +95,17 @@ class AppContainer(appContext: Context) {
     @Suppress("unused") // alive for its side effects: expiry sweep + room-death purge
     private val ephemerality = EphemeralityManager(chatRepository, roomRegistry.rooms, appScope)
 
+    /** GPS feed, alive only while the user shares their map position. */
+    val locationSharer = LocationSharer(appContext) { lat, lon ->
+        meshRouter.broadcastMyLocation(lat, lon)
+    }
+
     init {
-        // Help requests expire locally — nobody is around to expire them for us.
+        // Help requests and map pins expire locally — no server does it for us.
         appScope.launch {
             while (true) {
                 helpBoard.prune()
+                locationBoard.prune()
                 delay(30_000)
             }
         }

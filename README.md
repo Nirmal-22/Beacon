@@ -81,6 +81,7 @@ Scope discipline is a feature.
 - Intent broadcast (☕🎮💼🤝📚) with match surfacing + icebreaker-gated DMs.
 - Ephemeral by default: per-session identity, 24 h message expiry, instant purge on room death, anonymous mode.
 - Chat UX: delivered/read ticks (✓ / ✓✓ / blue ✓✓), typing indicator, unread badges, per-chat notifications, sonar ping on new peers, block & report.
+- **Opt-in map** (OpenStreetMap): appear as a pin only while you choose to; positions travel over the mesh, never a server. Off by default, resets every session.
 - 50+ JVM unit tests over the pure-Kotlin core (protocol, room registry, gate, help board, ephemerality).
 
 Remaining: on-device checkpoints for M3–M7 ([docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)) and the demo video ([docs/DEMO.md](docs/DEMO.md)).

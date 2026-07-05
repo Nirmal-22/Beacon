@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
@@ -77,7 +78,7 @@ import com.beacon.nearby.NearbyManager
 import com.beacon.service.BeaconService
 import kotlinx.coroutines.delay
 
-private enum class HomeTab { PEOPLE, ROOMS, HELP }
+private enum class HomeTab { PEOPLE, ROOMS, HELP, MAP }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -193,6 +194,12 @@ fun HomeScreen(
                     },
                     label = { Text("Help") },
                 )
+                NavigationBarItem(
+                    selected = tab == HomeTab.MAP,
+                    onClick = { tab = HomeTab.MAP },
+                    icon = { Icon(Icons.Default.Map, contentDescription = null) },
+                    label = { Text("Map") },
+                )
             }
         },
         floatingActionButton = {
@@ -220,7 +227,8 @@ fun HomeScreen(
                 !radarOn -> RadarOffState { BeaconService.start(context) }
                 tab == HomeTab.PEOPLE -> PeopleTab(peers, unread, viewModel, onOpenChat)
                 tab == HomeTab.ROOMS -> RoomsTab(myRooms, nearbyRooms, unread, viewModel, onOpenChat)
-                else -> HelpTab(helpPosts, viewModel, onOpenChat)
+                tab == HomeTab.HELP -> HelpTab(helpPosts, viewModel, onOpenChat)
+                else -> MapTab(viewModel)
             }
         }
     }
