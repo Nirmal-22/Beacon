@@ -137,6 +137,8 @@ class ChatRepository(
 
     suspend fun deleteRoom(roomCode: String) = dao.deleteRoom(roomCode)
 
+    suspend fun sweepOlderThan(cutoff: Long) = dao.deleteOlderThan(cutoff)
+
     private fun envelope(type: String, roomCode: String, body: String? = null) = BeaconEnvelope(
         type = type,
         msgId = IdGen.newMessageId(),

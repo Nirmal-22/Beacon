@@ -2,6 +2,7 @@ package com.beacon
 
 import android.content.Context
 import com.beacon.data.ChatRepository
+import com.beacon.data.EphemeralityManager
 import com.beacon.data.IdentityRepository
 import com.beacon.data.MeshRouter
 import com.beacon.data.db.BeaconDatabase
@@ -48,6 +49,9 @@ class AppContainer(appContext: Context) {
 
     /** Chats requested from outside the UI (notification taps). */
     val pendingChatOpens = MutableSharedFlow<ChatRoute>(extraBufferCapacity = 4)
+
+    @Suppress("unused") // alive for its side effects: expiry sweep + room-death purge
+    private val ephemerality = EphemeralityManager(chatRepository, roomRegistry.rooms, appScope)
 
     @Suppress("unused") // alive for its side effect: the new-peer sonar ping
     private val peerAlerter = PeerAlerter(appContext, nearbyManager.peers, appScope)
