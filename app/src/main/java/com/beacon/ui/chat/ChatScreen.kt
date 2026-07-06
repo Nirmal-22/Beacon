@@ -19,6 +19,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -49,6 +50,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.graphics.Color
 import com.beacon.domain.DmGate
 import com.beacon.model.ChatMessage
+import com.beacon.ui.components.PeerDetailsDialog
 import java.text.DateFormat
 import java.util.Date
 
@@ -70,7 +72,18 @@ fun ChatScreen(
     var input by rememberSaveable { mutableStateOf("") }
     var chatMenuOpen by remember { mutableStateOf(false) }
     var blockConfirmOpen by remember { mutableStateOf(false) }
+    var detailsOpen by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
+
+    if (detailsOpen) {
+        PeerDetailsDialog(
+            name = title,
+            intent = viewModel.dmPeerIntent(),
+            meet = viewModel.dmPeerMeet(),
+            onDismiss = { detailsOpen = false },
+            onBlock = { blockConfirmOpen = true },
+        )
+    }
 
     if (blockConfirmOpen) {
         AlertDialog(
@@ -157,6 +170,16 @@ fun ChatScreen(
                             expanded = chatMenuOpen,
                             onDismissRequest = { chatMenuOpen = false },
                         ) {
+                            DropdownMenuItem(
+                                text = { Text("View details") },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Info, contentDescription = null)
+                                },
+                                onClick = {
+                                    chatMenuOpen = false
+                                    detailsOpen = true
+                                },
+                            )
                             DropdownMenuItem(
                                 text = { Text("Block & report") },
                                 leadingIcon = {

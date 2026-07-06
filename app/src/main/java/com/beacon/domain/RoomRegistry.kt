@@ -36,10 +36,16 @@ class RoomRegistry(private val identity: Identity) {
     @Synchronized
     fun join(nameOrCode: String): Boolean {
         val code = codeFor(nameOrCode)
-        if (code.isEmpty() || myRooms.containsKey(code)) return false
+        if (code.isEmpty()) return false
         // Prefer the display name a nearby announcement already carries.
-        val knownName = _rooms.value[code]?.name ?: nameOrCode.trim()
-        myRooms[code] = knownName
+        return joinWithCode(code, _rooms.value[code]?.name ?: nameOrCode.trim())
+    }
+
+    /** Join under an explicit pre-agreed code (e.g. help-post rooms). */
+    @Synchronized
+    fun joinWithCode(code: String, name: String): Boolean {
+        if (code.isEmpty() || myRooms.containsKey(code)) return false
+        myRooms[code] = name
         reduce()
         return true
     }

@@ -26,11 +26,15 @@ class LocationBoard(private val now: () -> Long = System::currentTimeMillis) {
 
     fun setSharing(enabled: Boolean) {
         _sharing.value = enabled
-        if (!enabled) _myPosition.value = null
     }
 
+    /**
+     * Always stored: [myPosition] powers the local-only "you are here" dot.
+     * It leaves the device solely through [myLocationBody], which is gated
+     * on [sharing].
+     */
     fun onMyLocation(lat: Double, lon: Double) {
-        if (_sharing.value) _myPosition.value = lat to lon
+        _myPosition.value = lat to lon
     }
 
     /** @return my "lat,lon" body for (re)broadcast, or null when not sharing. */

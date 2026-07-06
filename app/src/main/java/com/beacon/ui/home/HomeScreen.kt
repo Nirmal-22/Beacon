@@ -30,9 +30,7 @@ import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Radar
-import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
@@ -76,6 +74,7 @@ import com.beacon.model.Peer
 import com.beacon.model.RoomInfo
 import com.beacon.nearby.NearbyManager
 import com.beacon.service.BeaconService
+import com.beacon.ui.components.PeerDetailsDialog
 import kotlinx.coroutines.delay
 
 private enum class HomeTab { PEOPLE, ROOMS, HELP, MAP }
@@ -109,31 +108,21 @@ fun HomeScreen(
             TopAppBar(
                 title = { Text("Beacon") },
                 actions = {
-                    Icon(
-                        imageVector = Icons.Default.Radar,
-                        contentDescription = null,
-                        tint = if (radarOn) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(end = 4.dp),
-                    )
+                    // Tapping the radar toggles discovery on/off.
+                    IconButton(onClick = {
+                        if (radarOn) BeaconService.stop(context) else BeaconService.start(context)
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.Radar,
+                            contentDescription = if (radarOn) "Turn radar off" else "Turn radar on",
+                            tint = if (radarOn) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     IconButton(onClick = { menuOpen = true }) {
                         Icon(Icons.Default.MoreVert, contentDescription = "Menu")
                     }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        DropdownMenuItem(
-                            text = { Text(if (radarOn) "Turn radar off" else "Turn radar on") },
-                            leadingIcon = {
-                                Icon(
-                                    if (radarOn) Icons.Default.Stop else Icons.Default.PlayArrow,
-                                    contentDescription = null,
-                                )
-                            },
-                            onClick = {
-                                menuOpen = false
-                                if (radarOn) BeaconService.stop(context)
-                                else BeaconService.start(context)
-                            },
-                        )
                         DropdownMenuItem(
                             text = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -272,6 +261,18 @@ private fun PeopleTab(
 ) {
     val myIntent by viewModel.myIntent.collectAsStateWithLifecycle()
     val peerIntents by viewModel.peerIntents.collectAsStateWithLifecycle()
+    val meets by viewModel.peerMeets.collectAsStateWithLifecycle()
+    var detailsFor by remember { mutableStateOf<Peer?>(null) }
+
+    detailsFor?.let { peer ->
+        PeerDetailsDialog(
+            name = peer.displayName,
+            intent = peerIntents[peer.sessionId],
+            meet = meets[peer.sessionId],
+            onDismiss = { detailsFor = null },
+            onBlock = { viewModel.block(peer.sessionId) },
+        )
+    }
 
     IntentChipRow(myIntent) { viewModel.setIntent(it) }
 
@@ -320,7 +321,32 @@ private fun PeopleTab(
                         )
                     },
                     trailingContent = {
-                        unread[dm]?.takeIf { it > 0 }?.let { Badge { Text("$it") } }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            unread[dm]?.takeIf { it > 0 }?.let { Badge { Text("$it") } }
+                            var rowMenu by remember { mutableStateOf(false) }
+                            IconButton(onClick = { rowMenu = true }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = "Options")
+                            }
+                            DropdownMenu(
+                                expanded = rowMenu,
+                                onDismissRequest = { rowMenu = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("View details") },
+                                    onClick = {
+                                        rowMenu = false
+                                        detailsFor = peer
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Block & report") },
+                                    onClick = {
+                                        rowMenu = false
+                                        viewModel.block(peer.sessionId)
+                                    },
+                                )
+                            }
+                        }
                     },
                 )
             }
@@ -464,16 +490,38 @@ private fun HelpTab(
                         )
                     },
                     trailingContent = {
-                        if (mine) {
-                            TextButton(onClick = { viewModel.cancelHelp(post.id) }) {
-                                Text("Cancel")
-                            }
-                        } else {
-                            Button(onClick = {
-                                val dm = viewModel.respondToHelp(post)
-                                onOpenChat(dm, post.posterName)
-                            }) {
-                                Text("I can help")
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (mine) {
+                                TextButton(onClick = { viewModel.cancelHelp(post.id) }) {
+                                    Text("Cancel")
+                                }
+                                TextButton(onClick = {
+                                    val (code, name) = viewModel.joinHelpChat(post)
+                                    onOpenChat(code, name)
+                                }) { Text("Open chat") }
+                            } else {
+                                // Default: everyone helping lands in one room.
+                                Button(onClick = {
+                                    val (code, name) = viewModel.joinHelpChat(post)
+                                    onOpenChat(code, name)
+                                }) { Text("I can help") }
+                                var helpMenu by remember { mutableStateOf(false) }
+                                IconButton(onClick = { helpMenu = true }) {
+                                    Icon(Icons.Default.MoreVert, contentDescription = "Options")
+                                }
+                                DropdownMenu(
+                                    expanded = helpMenu,
+                                    onDismissRequest = { helpMenu = false },
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Message privately") },
+                                        onClick = {
+                                            helpMenu = false
+                                            val dm = viewModel.respondToHelp(post)
+                                            onOpenChat(dm, post.posterName)
+                                        },
+                                    )
+                                }
                             }
                         }
                     },

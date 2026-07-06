@@ -14,17 +14,20 @@ class LocationBoardTest {
     fun `not sharing means no broadcast body even with a fix`() {
         board.onMyLocation(12.9, 77.6)
         assertNull(board.myLocationBody())
+        // The local-only dot still works.
+        assertEquals(12.9 to 77.6, board.myPosition.value)
     }
 
     @Test
-    fun `sharing produces a parseable body and stopping clears it`() {
+    fun `sharing produces a parseable body and stopping gates it again`() {
         board.setSharing(true)
         board.onMyLocation(12.9716, 77.5946)
         assertEquals("12.9716,77.5946", board.myLocationBody())
 
         board.setSharing(false)
         assertNull(board.myLocationBody())
-        assertNull(board.myPosition.value)
+        // Local dot survives — it never left the device anyway.
+        assertEquals(12.9716 to 77.5946, board.myPosition.value)
     }
 
     @Test

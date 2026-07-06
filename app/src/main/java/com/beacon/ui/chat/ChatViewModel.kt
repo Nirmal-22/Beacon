@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.beacon.AppContainer
 import com.beacon.domain.DmGate
 import com.beacon.domain.DmGate.Entry
+import com.beacon.domain.IntentTag
+import com.beacon.domain.PeerJournal
 import com.beacon.model.ChatMessage
 import com.beacon.nearby.protocol.BeaconEnvelope
 import kotlinx.coroutines.Job
@@ -64,6 +66,12 @@ class ChatViewModel(
     fun replyIcebreaker(accepted: Boolean) {
         dmPeerId?.let { container.meshRouter.replyIcebreaker(it, accepted) }
     }
+
+    fun dmPeerIntent(): IntentTag? =
+        dmPeerId?.let { container.intentBoard.peerIntents.value[it] }
+
+    fun dmPeerMeet(): PeerJournal.Meet? =
+        dmPeerId?.let { container.peerJournal.meets.value[it] }
 
     /** Block & report (no backend: they vanish and their envelopes drop). */
     fun blockPeer() {

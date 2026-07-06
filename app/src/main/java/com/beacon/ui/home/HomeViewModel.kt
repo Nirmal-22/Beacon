@@ -9,6 +9,7 @@ import com.beacon.domain.HelpCategory
 import com.beacon.domain.IdGen
 import com.beacon.domain.IntentTag
 import com.beacon.domain.LocationBoard
+import com.beacon.domain.PeerJournal
 import com.beacon.domain.RoomRegistry
 import com.beacon.model.Peer
 import com.beacon.model.RoomInfo
@@ -33,6 +34,11 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     fun unblockAll() = container.blockList.unblockAll()
+
+    fun block(sessionId: String) = container.blockList.block(sessionId)
+
+    /** How/when each peer was met, keyed by sessionId. */
+    val peerMeets: StateFlow<Map<String, PeerJournal.Meet>> = container.peerJournal.meets
 
     val status: StateFlow<NearbyManager.Status> = container.nearbyManager.status
 
@@ -70,6 +76,10 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
     fun respondToHelp(post: HelpBoard.HelpPost): String =
         container.meshRouter.respondToHelp(post)
 
+    /** Default respond action: shared helpers' room. @return code to title. */
+    fun joinHelpChat(post: HelpBoard.HelpPost): Pair<String, String> =
+        container.meshRouter.joinHelpChat(post)
+
     // --- Map ---
 
     val mapSharing: StateFlow<Boolean> = container.locationBoard.sharing
@@ -84,10 +94,33 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
         if (enabled) {
             container.locationSharer.start()
         } else {
-            container.locationSharer.stop()
             container.meshRouter.clearMyLocation()
+            // GPS keeps feeding the local-only dot while the map is open.
         }
     }
+
+    /** Local-only "you are here" dot; requires permission, broadcasts nothing. */
+    fun startLocalDot() = container.locationSharer.start()
+
+    fun stopLocalDotIfNotSharing() {
+        if (!container.locationBoard.sharing.value) container.locationSharer.stop()
+    }
+
+    /** Rooms whose sharing members give them a plottable position (centroid). */
+    val roomPins: StateFlow<List<Pair<RoomInfo, Pair<Double, Double>>>> =
+        combine(container.roomRegistry.rooms, container.locationBoard.pins) { rooms, pins ->
+            rooms.values.mapNotNull { room ->
+                val points = room.members.keys.mapNotNull { pins[it]?.let { p -> p.lat to p.lon } }
+                if (points.isEmpty()) null
+                else room to (points.map { it.first }.average() to points.map { it.second }.average())
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Connected people who chose not to be on the map — shown as a strip. */
+    val inRangeNotOnMap: StateFlow<List<String>> =
+        combine(peers, container.locationBoard.pins) { ps, pins ->
+            ps.filter { it.sessionId !in pins }.map { it.displayName }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val anonymousHandle: String
         get() = AnonymousNames.forSession(container.identityRepository.sessionId)

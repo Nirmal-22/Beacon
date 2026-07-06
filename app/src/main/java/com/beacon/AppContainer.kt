@@ -13,6 +13,7 @@ import com.beacon.domain.DmGate
 import com.beacon.domain.HelpBoard
 import com.beacon.domain.IntentBoard
 import com.beacon.domain.LocationBoard
+import com.beacon.domain.PeerJournal
 import com.beacon.domain.RoomRegistry
 import com.beacon.model.Peer
 import com.beacon.nearby.NearbyManager
@@ -53,6 +54,8 @@ class AppContainer(appContext: Context) {
 
     val locationBoard = LocationBoard()
 
+    val peerJournal = PeerJournal()
+
     private val messagesNotifier = MessagesNotifier(appContext) { roomCode, sender ->
         if (roomCode.startsWith("dm:")) sender
         else roomRegistry.rooms.value[roomCode]?.name ?: sender
@@ -66,6 +69,7 @@ class AppContainer(appContext: Context) {
         gate = dmGate,
         help = helpBoard,
         locations = locationBoard,
+        journal = peerJournal,
         scope = appScope,
         alerts = object : SocialAlerts {
             override fun onIcebreaker(peer: Peer, emoji: String, dmRoomCode: String) {
