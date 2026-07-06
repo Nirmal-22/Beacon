@@ -21,6 +21,7 @@ import com.google.android.gms.nearby.connection.PayloadCallback
 import com.google.android.gms.nearby.connection.PayloadTransferUpdate
 import com.google.android.gms.nearby.connection.Strategy
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -67,20 +68,72 @@ class NearbyManager(
     /** Endpoints seen by discovery but not yet connected: endpointId -> session prefix. */
     private val discovered = mutableMapOf<String, String>()
 
+    /** Last inbound payload per connected endpoint — liveness signal. */
+    private val lastSeenAt = mutableMapOf<String, Long>()
+
+    private var heartbeatJob: Job? = null
+
     fun start() {
         if (_status.value == Status.ACTIVE) return
         _status.value = Status.ACTIVE
         startAdvertising()
         startDiscovery()
+        heartbeatJob = scope.launch { heartbeatLoop() }
     }
 
     fun stop() {
+        heartbeatJob?.cancel()
+        heartbeatJob = null
         client.stopAllEndpoints()
         client.stopAdvertising()
         client.stopDiscovery()
         discovered.clear()
+        lastSeenAt.clear()
         _peers.value = emptyMap()
         _status.value = Status.IDLE
+    }
+
+    /**
+     * Nearby's own keep-alive can take minutes to flag a dead link, which
+     * left ghost peers on screen. Every tick we (1) prove we're alive to
+     * everyone, (2) drop peers that have been silent past the window, and
+     * (3) retry endpoints that are discovered but never got connected.
+     */
+    private suspend fun heartbeatLoop() {
+        while (true) {
+            delay(HEARTBEAT_INTERVAL_MS)
+            if (_status.value != Status.ACTIVE) continue
+
+            sendToAll(
+                BeaconEnvelope(
+                    type = BeaconEnvelope.TYPE_HEARTBEAT,
+                    msgId = IdGen.newMessageId(),
+                    senderId = identity.sessionId,
+                    senderName = identity.effectiveName,
+                    ts = System.currentTimeMillis(),
+                )
+            )
+
+            val cutoff = System.currentTimeMillis() - STALE_PEER_MS
+            _peers.value.keys
+                .filter { (lastSeenAt[it] ?: 0L) < cutoff }
+                .forEach { endpointId ->
+                    Log.i(TAG, "pruning silent peer $endpointId")
+                    client.disconnectFromEndpoint(endpointId)
+                    lastSeenAt.remove(endpointId)
+                    _peers.update { it - endpointId }
+                }
+
+            // Connections that never happened (missed callbacks, failed race):
+            // discovery won't re-fire onEndpointFound while they stay in range.
+            discovered
+                .filterKeys { it !in _peers.value }
+                .forEach { (endpointId, prefix) ->
+                    if (IdGen.shouldInitiateConnection(identity.sessionId, prefix)) {
+                        requestConnection(endpointId, isRetry = true)
+                    }
+                }
+        }
     }
 
     override fun send(envelope: BeaconEnvelope, endpointIds: List<String>) {
@@ -164,7 +217,10 @@ class NearbyManager(
 
         override fun onConnectionResult(endpointId: String, result: ConnectionResolution) {
             when (result.status.statusCode) {
-                ConnectionsStatusCodes.STATUS_OK -> sendHello(endpointId)
+                ConnectionsStatusCodes.STATUS_OK -> {
+                    lastSeenAt[endpointId] = System.currentTimeMillis()
+                    sendHello(endpointId)
+                }
                 ConnectionsStatusCodes.STATUS_CONNECTION_REJECTED -> discovered.remove(endpointId)
                 else -> {
                     // Usually the simultaneous-connect race; the tie-break
@@ -182,25 +238,31 @@ class NearbyManager(
         }
 
         override fun onDisconnected(endpointId: String) {
+            lastSeenAt.remove(endpointId)
             _peers.update { it - endpointId }
         }
     }
 
     private val payloadCallback = object : PayloadCallback() {
         override fun onPayloadReceived(endpointId: String, payload: Payload) {
+            lastSeenAt[endpointId] = System.currentTimeMillis()
             val bytes = payload.asBytes() ?: return
             val envelope = ProtocolCodec.decode(bytes) ?: return
-            if (envelope.type == BeaconEnvelope.TYPE_HELLO) {
-                _peers.update {
-                    it + (endpointId to Peer(
-                        endpointId = endpointId,
-                        sessionId = envelope.senderId,
-                        displayName = envelope.senderName,
-                        isConnected = true,
-                    ))
+            when (envelope.type) {
+                BeaconEnvelope.TYPE_HEARTBEAT -> Unit // liveness recorded above
+                BeaconEnvelope.TYPE_HELLO -> _peers.update { current ->
+                    // A session may reappear under a fresh endpoint (app
+                    // restart, radio reconnect) before Nearby reports the old
+                    // link dead — drop stale twins so a person appears once.
+                    current.filterValues { it.sessionId != envelope.senderId } +
+                        (endpointId to Peer(
+                            endpointId = endpointId,
+                            sessionId = envelope.senderId,
+                            displayName = envelope.senderName,
+                            isConnected = true,
+                        ))
                 }
-            } else {
-                _inbound.tryEmit(endpointId to envelope)
+                else -> _inbound.tryEmit(endpointId to envelope)
             }
         }
 
@@ -234,5 +296,7 @@ class NearbyManager(
         private const val TAG = "NearbyManager"
         private const val RETRY_BASE_MS = 2_000L
         private const val RETRY_JITTER_MS = 1_000L
+        private const val HEARTBEAT_INTERVAL_MS = 15_000L
+        private const val STALE_PEER_MS = 45_000L
     }
 }

@@ -37,10 +37,13 @@ class PeerAlerter(
     init {
         peers
             .onEach { current ->
-                val fresh = current.keys - known
+                // Keyed by person (sessionId), not transport endpoint — a radio
+                // reconnect of the same person shouldn't ping again.
+                val sessions = current.values.map { it.sessionId }.toSet()
+                val fresh = sessions - known
                 // Only ping for arrivals after the first snapshot, not on app start.
                 if (known.isNotEmpty() && fresh.isNotEmpty()) ping()
-                known = current.keys
+                known = sessions
             }
             .launchIn(scope)
     }

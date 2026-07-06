@@ -60,7 +60,11 @@ class BeaconService : Service() {
     }
 
     override fun onDestroy() {
-        (application as BeaconApp).container.nearbyManager.stop()
+        val container = (application as BeaconApp).container
+        container.nearbyManager.stop()
+        // Radar off means fully invisible — that includes the map pin and GPS.
+        container.locationBoard.setSharing(false)
+        container.locationSharer.stop()
         scope.cancel()
         super.onDestroy()
     }

@@ -32,4 +32,8 @@ interface MessageDao {
     /** M4 expiry sweep: drop anything older than the cutoff. */
     @Query("DELETE FROM messages WHERE timestamp < :cutoff")
     suspend fun deleteOlderThan(cutoff: Long)
+
+    /** Own messages the peer never ACKed — candidates for redelivery. */
+    @Query("SELECT * FROM messages WHERE roomCode = :roomCode AND isMine = 1 AND delivered = 0")
+    suspend fun undelivered(roomCode: String): List<MessageEntity>
 }

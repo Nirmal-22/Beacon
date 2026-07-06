@@ -58,6 +58,36 @@ class ChatRepository(
                 }
             }
             .launchIn(scope)
+
+        // Redelivery: a DM typed while the other person was out of range sat
+        // undelivered. When their session reappears, send it again — the
+        // receiver's msgId idempotency makes duplicates harmless.
+        var knownSessions = emptySet<String>()
+        nearby.peers
+            .onEach { peers ->
+                val sessions = peers.values.associateBy { it.sessionId }
+                val returned = sessions.keys - knownSessions
+                knownSessions = sessions.keys
+                returned.forEach { sessionId ->
+                    val peer = sessions.getValue(sessionId)
+                    val dm = IdGen.dmRoomCode(identity.sessionId, sessionId)
+                    dao.undelivered(dm).forEach { msg ->
+                        nearby.send(
+                            BeaconEnvelope(
+                                type = BeaconEnvelope.TYPE_CHAT_MSG,
+                                msgId = msg.msgId,
+                                senderId = msg.senderId,
+                                senderName = msg.senderName,
+                                roomCode = msg.roomCode,
+                                ts = msg.timestamp,
+                                body = msg.text,
+                            ),
+                            listOf(peer.endpointId),
+                        )
+                    }
+                }
+            }
+            .launchIn(scope)
     }
 
     private suspend fun onChatMessage(endpointId: String, envelope: BeaconEnvelope) {

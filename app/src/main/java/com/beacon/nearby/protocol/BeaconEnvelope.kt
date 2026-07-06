@@ -26,6 +26,12 @@ data class BeaconEnvelope(
         /** Identity exchange, sent by both sides immediately after connecting. */
         const val TYPE_HELLO = "HELLO"
 
+        /**
+         * Liveness tick. Nearby can take minutes to notice a dead link; peers
+         * silent past the heartbeat window are pruned proactively.
+         */
+        const val TYPE_HEARTBEAT = "HB"
+
         /** Chat text; [roomCode] is set (dm:* codes for 1:1 chats). */
         const val TYPE_CHAT_MSG = "CHAT_MSG"
 

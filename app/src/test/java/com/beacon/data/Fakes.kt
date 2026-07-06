@@ -45,6 +45,9 @@ class FakeDao : MessageDao {
         rows.values.removeIf { it.timestamp < cutoff }
         state.value = rows.values.toList()
     }
+
+    override suspend fun undelivered(roomCode: String): List<MessageEntity> =
+        rows.values.filter { it.roomCode == roomCode && it.isMine && !it.delivered }
 }
 
 class FakeTransport : MeshTransport {
@@ -53,6 +56,7 @@ class FakeTransport : MeshTransport {
     val sent = mutableListOf<Pair<BeaconEnvelope, List<String>>>()
 
     override fun send(envelope: BeaconEnvelope, endpointIds: List<String>) {
+        if (endpointIds.isEmpty()) return // mirrors NearbyManager.send
         sent += envelope to endpointIds
     }
 }

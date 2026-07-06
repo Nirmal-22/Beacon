@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -150,22 +152,26 @@ class ChatRepositoryTest {
     fun `ACK marks the original message delivered`() = runTest {
         val repo = ChatRepository(dao, transport, identity, backgroundScope)
         transport.inbound.subscriptionCount.first { it > 0 }
-        repo.send("dm:a:b", "hello")
+        val other = Peer("ep-1", "bbbb-remote", "Them", isConnected = true)
+        transport.peers.value = mapOf("ep-1" to other)
+        val dm = IdGen.dmRoomCode(identity.sessionId, other.sessionId)
+
+        repo.send(dm, "hello")
         val sentId = transport.sent.single().first.msgId
 
         transport.inbound.emit(
             "ep-1" to BeaconEnvelope(
                 type = BeaconEnvelope.TYPE_ACK,
                 msgId = "ack-1",
-                senderId = "bbbb-remote",
+                senderId = other.sessionId,
                 senderName = "Them",
-                roomCode = "dm:a:b",
+                roomCode = dm,
                 ts = 2,
                 body = sentId,
             )
         )
 
-        val delivered = repo.messagesFor("dm:a:b").first { list -> list.any { it.delivered } }
+        val delivered = repo.messagesFor(dm).first { list -> list.any { it.delivered } }
         assertTrue(delivered.single().delivered)
     }
 
@@ -228,6 +234,29 @@ class ChatRepositoryTest {
 
         val types = transport.sent.map { it.first.type }
         assertEquals(listOf(BeaconEnvelope.TYPE_ACK, BeaconEnvelope.TYPE_READ), types)
+    }
+
+    @Test
+    fun `undelivered dm messages are resent when the peer reconnects`() = runTest {
+        val repo = ChatRepository(dao, transport, identity, backgroundScope)
+        transport.inbound.subscriptionCount.first { it > 0 }
+        val other = Peer("ep-1", "bbbb-remote", "Them", isConnected = true)
+        val dm = IdGen.dmRoomCode(identity.sessionId, other.sessionId)
+
+        // Typed while alone: stored locally, sent to nobody.
+        repo.send(dm, "are you there?")
+        assertTrue(transport.sent.isEmpty())
+
+        // They come into range.
+        transport.peers.value = mapOf("ep-1" to other)
+
+        val resent = withTimeout(5_000) {
+            while (transport.sent.isEmpty()) yield()
+            transport.sent.single()
+        }
+        assertEquals(BeaconEnvelope.TYPE_CHAT_MSG, resent.first.type)
+        assertEquals("are you there?", resent.first.body)
+        assertEquals(listOf("ep-1"), resent.second)
     }
 
     @Test
