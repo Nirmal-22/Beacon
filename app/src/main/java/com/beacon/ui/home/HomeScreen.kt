@@ -56,6 +56,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -76,6 +77,8 @@ import com.beacon.nearby.NearbyManager
 import com.beacon.service.BeaconService
 import com.beacon.ui.components.PeerDetailsDialog
 import kotlinx.coroutines.delay
+import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.views.MapView
 
 private enum class HomeTab { PEOPLE, ROOMS, HELP, MAP }
 
@@ -98,6 +101,23 @@ fun HomeScreen(
     var postHelpOpen by remember { mutableStateOf(false) }
     val helpPosts by viewModel.helpPosts.collectAsStateWithLifecycle()
     val blockedCount by viewModel.blockedCount.collectAsStateWithLifecycle()
+
+    // One MapView for the whole Home lifetime — recreating it on every tab
+    // switch is what caused the visible glitch when opening the Map tab.
+    val mapView = remember {
+        MapView(context).apply {
+            setTileSource(TileSourceFactory.MAPNIK)
+            setMultiTouchControls(true)
+            controller.setZoom(17.0)
+        }
+    }
+    DisposableEffect(Unit) {
+        mapView.onResume()
+        onDispose {
+            mapView.onPause()
+            mapView.onDetach()
+        }
+    }
     val radarOn = status == NearbyManager.Status.ACTIVE
 
     val dmUnread = unread.filterKeys { it.startsWith("dm:") }.values.sum()
@@ -209,7 +229,8 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            if (anonymous && radarOn) {
+            // The map draws its own floating controls; the banner would fight them.
+            if (anonymous && radarOn && tab != HomeTab.MAP) {
                 InfoBanner("You appear as ${viewModel.anonymousHandle}")
             }
             when {
@@ -217,7 +238,7 @@ fun HomeScreen(
                 tab == HomeTab.PEOPLE -> PeopleTab(peers, unread, viewModel, onOpenChat)
                 tab == HomeTab.ROOMS -> RoomsTab(myRooms, nearbyRooms, unread, viewModel, onOpenChat)
                 tab == HomeTab.HELP -> HelpTab(helpPosts, viewModel, onOpenChat)
-                else -> MapTab(viewModel)
+                else -> MapTab(viewModel, mapView)
             }
         }
     }
