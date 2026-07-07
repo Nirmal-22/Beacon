@@ -119,6 +119,11 @@ class MeshRouter(
         if (rooms.join(nameOrCode)) broadcastAnnounce()
     }
 
+    /** Join a room discovered nearby under its exact announced code. */
+    fun joinRoomByCode(code: String, name: String) {
+        if (rooms.joinWithCode(code, name)) broadcastAnnounce()
+    }
+
     fun leaveRoom(code: String) {
         if (rooms.leave(code)) broadcastAnnounce()
     }

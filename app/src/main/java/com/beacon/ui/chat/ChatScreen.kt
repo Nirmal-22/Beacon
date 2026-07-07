@@ -1,5 +1,6 @@
 package com.beacon.ui.chat
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -73,7 +74,30 @@ fun ChatScreen(
     var chatMenuOpen by remember { mutableStateOf(false) }
     var blockConfirmOpen by remember { mutableStateOf(false) }
     var detailsOpen by remember { mutableStateOf(false) }
+    var membersOpen by remember { mutableStateOf(false) }
+    val members by viewModel.members.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
+
+    if (membersOpen) {
+        AlertDialog(
+            onDismissRequest = { membersOpen = false },
+            title = { Text(if (members.size == 1) "1 person here" else "${members.size} people here") },
+            text = {
+                Column {
+                    members.forEach { name ->
+                        Text(name, style = MaterialTheme.typography.bodyLarge)
+                    }
+                    if (members.isEmpty()) {
+                        Text(
+                            "Nobody here anymore — the room ends when the last person leaves.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { membersOpen = false }) { Text("Close") } },
+        )
+    }
 
     if (detailsOpen) {
         PeerDetailsDialog(
@@ -123,7 +147,12 @@ fun ChatScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
+                    // Group rooms: tapping the title shows who's here.
+                    Column(
+                        modifier = if (viewModel.isGroupRoom) {
+                            Modifier.clickable { membersOpen = true }
+                        } else Modifier,
+                    ) {
                         Text(title)
                         val subtitle = when {
                             typingName != null ->

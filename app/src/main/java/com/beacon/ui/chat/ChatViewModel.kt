@@ -91,6 +91,14 @@ class ChatViewModel(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
+    /** Member names for the tap-the-title members sheet (group rooms). */
+    val members: StateFlow<List<String>> = container.roomRegistry.rooms
+        .map { rooms ->
+            if (!isGroupRoom) emptyList()
+            else rooms[roomCode]?.members?.values?.sorted().orEmpty()
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     private val _typingName = MutableStateFlow<String?>(null)
     val typingName: StateFlow<String?> = _typingName.asStateFlow()
 

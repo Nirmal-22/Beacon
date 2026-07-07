@@ -423,7 +423,7 @@ private fun RoomsTab(
             item { SectionHeader("Nearby rooms") }
             items(nearbyRooms, key = { "near-" + it.code }) { room ->
                 RoomRow(room = room, unreadCount = 0, actionIcon = Icons.AutoMirrored.Filled.Login) {
-                    viewModel.joinRoom(room.name)
+                    viewModel.joinNearbyRoom(room)
                     onOpenChat(room.code, room.name)
                 }
             }

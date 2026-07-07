@@ -14,7 +14,12 @@ object AnonymousNames {
     )
 
     fun forSession(sessionId: String): String {
-        val (animal, emoji) = ANIMALS[Math.floorMod(sessionId.hashCode(), ANIMALS.size)]
-        return "Anon $animal $emoji"
+        val hash = sessionId.hashCode()
+        val (animal, emoji) = ANIMALS[Math.floorMod(hash, ANIMALS.size)]
+        // Numbered suffix: 12 animals alone collide fast with a few phones in
+        // range (two Anon Otters happened in the field). Animal+number gives
+        // ~1080 handles — still no coordination, collisions now rare.
+        val number = Math.floorMod(hash / ANIMALS.size, 90) + 10
+        return "Anon $animal-$number $emoji"
     }
 }

@@ -42,8 +42,6 @@ import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
-import kotlin.math.cos
-import kotlin.math.sin
 
 /**
  * Fullscreen map with floating controls (hideable for a clean view).
@@ -75,9 +73,9 @@ fun MapTab(viewModel: HomeViewModel, mapView: MapView) {
 
     LaunchedEffect(Unit) { if (hasLocationPermission()) viewModel.startLocalDot() }
 
-    // Peers connected but not sharing: place them on a deterministic ring
-    // around my dot — presence is real, position is approximate and says so.
-    val approximatePeers = peers.filter { it.sessionId !in pins }
+    // Peers connected but not sharing. They get NO marker — a pin implies a
+    // position, and their toggle is off. They live in the strip instead.
+    val notOnMap = peers.filter { it.sessionId !in pins }
 
     fun allPoints(): List<GeoPoint> = buildList {
         myPosition?.let { (lat, lon) -> add(GeoPoint(lat, lon)) }
@@ -134,25 +132,6 @@ fun MapTab(viewModel: HomeViewModel, mapView: MapView) {
                         }
                     )
                 }
-                myPosition?.let { (lat, lon) ->
-                    approximatePeers.forEach { peer ->
-                        val angle = Math.toRadians(
-                            (Math.floorMod(peer.sessionId.hashCode(), 360)).toDouble()
-                        )
-                        val dLat = APPROX_RING_METERS * cos(angle) / 111_111.0
-                        val dLon = APPROX_RING_METERS * sin(angle) /
-                            (111_111.0 * cos(Math.toRadians(lat)).coerceAtLeast(0.01))
-                        map.overlays.add(
-                            Marker(map).apply {
-                                position = GeoPoint(lat + dLat, lon + dLon)
-                                title = peer.displayName
-                                snippet = "In range — exact spot unknown"
-                                alpha = 0.55f
-                                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                            }
-                        )
-                    }
-                }
                 map.invalidate()
             },
         )
@@ -196,7 +175,7 @@ fun MapTab(viewModel: HomeViewModel, mapView: MapView) {
                         )
                     }
                 }
-                if (approximatePeers.isNotEmpty() && myPosition == null) {
+                if (notOnMap.isNotEmpty()) {
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -211,11 +190,11 @@ fun MapTab(viewModel: HomeViewModel, mapView: MapView) {
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                "In range:",
+                                "In range, not on map:",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                            approximatePeers.forEach { peer ->
+                            notOnMap.forEach { peer ->
                                 AssistChip(onClick = {}, label = { Text(peer.displayName) })
                             }
                         }
@@ -242,5 +221,3 @@ fun MapTab(viewModel: HomeViewModel, mapView: MapView) {
         }
     }
 }
-
-private const val APPROX_RING_METERS = 45.0

@@ -13,8 +13,10 @@ class AnonymousNamesTest {
     }
 
     @Test
-    fun `handle has the anonymous prefix`() {
-        assertTrue(AnonymousNames.forSession("any-session").startsWith("Anon "))
+    fun `handle has the anonymous prefix and a distinguishing number`() {
+        val handle = AnonymousNames.forSession("any-session")
+        assertTrue(handle.startsWith("Anon "))
+        assertTrue(handle.matches(Regex("Anon [A-Za-z]+-\\d{2} .+")))
     }
 
     @Test

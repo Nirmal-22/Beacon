@@ -116,11 +116,6 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    /** Connected people who chose not to be on the map — shown as a strip. */
-    val inRangeNotOnMap: StateFlow<List<String>> =
-        combine(peers, container.locationBoard.pins) { ps, pins ->
-            ps.filter { it.sessionId !in pins }.map { it.displayName }
-        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val anonymousHandle: String
         get() = AnonymousNames.forSession(container.identityRepository.sessionId)
@@ -135,6 +130,14 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
         container.meshRouter.joinRoom(nameOrCode)
         return RoomRegistry.codeFor(nameOrCode)
     }
+
+    /**
+     * Join a nearby room by its announced code — names are display-only.
+     * (Joining by name would mint a different room for help-post rooms,
+     * whose codes aren't derived from their emoji titles.)
+     */
+    fun joinNearbyRoom(room: RoomInfo) =
+        container.meshRouter.joinRoomByCode(room.code, room.name)
 
     /** DM room code shared by both devices without negotiation. */
     fun dmRoomCodeFor(peer: Peer): String =
