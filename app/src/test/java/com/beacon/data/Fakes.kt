@@ -2,6 +2,7 @@ package com.beacon.data
 
 import com.beacon.data.db.MessageDao
 import com.beacon.data.db.MessageEntity
+import com.beacon.data.db.RecentChatRow
 import com.beacon.model.Peer
 import com.beacon.nearby.MeshTransport
 import com.beacon.nearby.protocol.BeaconEnvelope
@@ -48,6 +49,23 @@ class FakeDao : MessageDao {
 
     override suspend fun undelivered(roomCode: String): List<MessageEntity> =
         rows.values.filter { it.roomCode == roomCode && it.isMine && !it.delivered }
+
+    override fun recentDmChats(): Flow<List<RecentChatRow>> = state.map { list ->
+        list.filter { it.roomCode.startsWith("dm:") }
+            .groupBy { it.roomCode }
+            .map { (code, msgs) ->
+                val last = msgs.maxBy { it.timestamp }
+                RecentChatRow(
+                    roomCode = code,
+                    lastText = last.text,
+                    lastTs = last.timestamp,
+                    lastMine = last.isMine,
+                    peerName = msgs.filter { !it.isMine }
+                        .maxByOrNull { it.timestamp }?.senderName,
+                )
+            }
+            .sortedByDescending { it.lastTs }
+    }
 }
 
 class FakeTransport : MeshTransport {

@@ -1,5 +1,11 @@
 package com.beacon.ui.home
 
+import android.app.NotificationManager
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
+import android.os.PowerManager
+import android.provider.Settings
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -7,6 +13,8 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,6 +34,7 @@ import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MoreVert
@@ -51,6 +60,8 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -61,6 +72,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -68,6 +80,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.beacon.data.db.RecentChatRow
 import com.beacon.domain.HelpBoard
 import com.beacon.domain.HelpCategory
 import com.beacon.domain.IntentTag
@@ -75,14 +88,18 @@ import com.beacon.model.Peer
 import com.beacon.model.RoomInfo
 import com.beacon.nearby.NearbyManager
 import com.beacon.service.BeaconService
+import com.beacon.ui.components.Avatar
 import com.beacon.ui.components.PeerDetailsDialog
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.views.MapView
+import java.text.DateFormat
+import java.util.Date
 
 private enum class HomeTab { PEOPLE, ROOMS, HELP, MAP }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel,
@@ -96,6 +113,12 @@ fun HomeScreen(
     val nearbyRooms by viewModel.nearbyRooms.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var menuOpen by remember { mutableStateOf(false) }
+    var renameOpen by remember { mutableStateOf(false) }
+    val helpedCount by viewModel.helpedCount.collectAsStateWithLifecycle()
+    val recentChats by viewModel.recentChats.collectAsStateWithLifecycle()
+    val batteryDismissed by viewModel.batteryPromptDismissed.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
     var tab by rememberSaveable { mutableStateOf(HomeTab.PEOPLE) }
     var createRoomOpen by remember { mutableStateOf(false) }
     var postHelpOpen by remember { mutableStateOf(false) }
@@ -124,14 +147,33 @@ fun HomeScreen(
     val roomUnread = unread.filterKeys { !it.startsWith("dm:") }.values.sum()
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("Beacon") },
                 actions = {
-                    // Tapping the radar toggles discovery on/off.
-                    IconButton(onClick = {
-                        if (radarOn) BeaconService.stop(context) else BeaconService.start(context)
-                    }) {
+                    // Tap: toggle radar. Long-press: panic — instantly invisible
+                    // and silent, no confirmation in the way.
+                    Box(
+                        modifier = Modifier
+                            .combinedClickable(
+                                onClick = {
+                                    if (radarOn) BeaconService.stop(context)
+                                    else BeaconService.start(context)
+                                },
+                                onLongClick = {
+                                    BeaconService.stop(context)
+                                    context.getSystemService(NotificationManager::class.java)
+                                        .cancelAll()
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar(
+                                            "Silenced — radar off, notifications cleared"
+                                        )
+                                    }
+                                },
+                            )
+                            .padding(12.dp),
+                    ) {
                         Icon(
                             imageVector = Icons.Default.Radar,
                             contentDescription = if (radarOn) "Turn radar off" else "Turn radar on",
@@ -143,6 +185,20 @@ fun HomeScreen(
                         Icon(Icons.Default.MoreVert, contentDescription = "Menu")
                     }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        if (helpedCount > 0) {
+                            DropdownMenuItem(
+                                text = { Text("🙏 Helped $helpedCount ${if (helpedCount == 1) "person" else "people"}") },
+                                onClick = { menuOpen = false },
+                            )
+                        }
+                        DropdownMenuItem(
+                            text = { Text("Change name") },
+                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                            onClick = {
+                                menuOpen = false
+                                renameOpen = true
+                            },
+                        )
                         DropdownMenuItem(
                             text = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -229,20 +285,58 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            // The map draws its own floating controls; the banner would fight them.
-            if (anonymous && radarOn && tab != HomeTab.MAP) {
-                InfoBanner("You appear as ${viewModel.anonymousHandle}")
+            // The map draws its own floating controls; banners would fight them.
+            if (tab != HomeTab.MAP) {
+                if (anonymous && radarOn) {
+                    InfoBanner("You appear as ${viewModel.anonymousHandle}")
+                }
+                if (!radarOn) {
+                    // Invisible ≠ blind: history and the map stay readable.
+                    RadarOffBanner { BeaconService.start(context) }
+                }
             }
-            when {
-                !radarOn -> RadarOffState { BeaconService.start(context) }
-                tab == HomeTab.PEOPLE -> PeopleTab(peers, unread, viewModel, onOpenChat)
-                tab == HomeTab.ROOMS -> RoomsTab(myRooms, nearbyRooms, unread, viewModel, onOpenChat)
-                tab == HomeTab.HELP -> HelpTab(helpPosts, viewModel, onOpenChat)
-                else -> MapTab(viewModel, mapView)
+            when (tab) {
+                HomeTab.PEOPLE -> PeopleTab(
+                    peers = peers,
+                    unread = unread,
+                    recentChats = recentChats,
+                    radarOn = radarOn,
+                    batteryDismissed = batteryDismissed,
+                    viewModel = viewModel,
+                    onOpenChat = onOpenChat,
+                )
+                HomeTab.ROOMS -> RoomsTab(myRooms, nearbyRooms, unread, viewModel, onOpenChat)
+                HomeTab.HELP -> HelpTab(helpPosts, viewModel, onOpenChat)
+                HomeTab.MAP -> MapTab(viewModel, mapView, radarOn)
             }
         }
     }
 
+    if (renameOpen) {
+        var name by remember { mutableStateOf(viewModel.myDisplayName) }
+        AlertDialog(
+            onDismissRequest = { renameOpen = false },
+            title = { Text("Change name") },
+            text = {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { if (it.length <= 40) name = it },
+                    label = { Text("Display name") },
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.rename(name)
+                        renameOpen = false
+                    },
+                    enabled = name.isNotBlank(),
+                ) { Text("Save") }
+            },
+            dismissButton = { TextButton(onClick = { renameOpen = false }) { Text("Cancel") } },
+        )
+    }
     if (createRoomOpen) {
         CreateRoomDialog(
             onDismiss = { createRoomOpen = false },
@@ -277,9 +371,13 @@ private fun CountBadge(count: Int, content: @Composable () -> Unit) {
 private fun PeopleTab(
     peers: List<Peer>,
     unread: Map<String, Int>,
+    recentChats: List<RecentChatRow>,
+    radarOn: Boolean,
+    batteryDismissed: Boolean,
     viewModel: HomeViewModel,
     onOpenChat: (String, String) -> Unit,
 ) {
+    val context = LocalContext.current
     val myIntent by viewModel.myIntent.collectAsStateWithLifecycle()
     val peerIntents by viewModel.peerIntents.collectAsStateWithLifecycle()
     val meets by viewModel.peerMeets.collectAsStateWithLifecycle()
@@ -295,81 +393,200 @@ private fun PeopleTab(
         )
     }
 
-    IntentChipRow(myIntent) { viewModel.setIntent(it) }
-
-    if (peers.isEmpty()) {
-        ScanningState()
-        return
+    val batteryExempt = remember {
+        context.getSystemService(PowerManager::class.java)
+            .isIgnoringBatteryOptimizations(context.packageName)
     }
+
+    if (radarOn) IntentChipRow(myIntent) { viewModel.setIntent(it) }
+
     // Matching intents float to the top — that's the discovery feature.
     val sorted = peers.sortedByDescending {
         myIntent != null && peerIntents[it.sessionId] == myIntent
     }
-    Text(
-        text = "Nearby",
-        style = MaterialTheme.typography.titleMedium,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-    )
+
+    if (radarOn && peers.isEmpty() && recentChats.isEmpty() && batteryExempt) {
+        ScanningState()
+        return
+    }
+
     LazyColumn {
-        items(sorted, key = { it.endpointId }) { peer ->
-            val dm = viewModel.dmRoomCodeFor(peer)
-            val intent = peerIntents[peer.sessionId]
-            val matches = myIntent != null && intent == myIntent
-            Card(
-                onClick = { onOpenChat(dm, peer.displayName) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-            ) {
-                ListItem(
-                    leadingContent = {
-                        if (intent != null) {
-                            Text(intent.emoji, style = MaterialTheme.typography.headlineSmall)
-                        } else {
-                            Icon(Icons.Default.Person, contentDescription = null)
-                        }
-                    },
-                    headlineContent = { Text(peer.displayName) },
-                    supportingContent = {
-                        Text(
-                            when {
-                                matches -> "Also here for ${intent!!.label} — say hi!"
-                                intent != null -> "Here for ${intent.label}"
-                                else -> "Tap to chat"
-                            },
-                            color = if (matches) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    },
-                    trailingContent = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            unread[dm]?.takeIf { it > 0 }?.let { Badge { Text("$it") } }
-                            var rowMenu by remember { mutableStateOf(false) }
-                            IconButton(onClick = { rowMenu = true }) {
-                                Icon(Icons.Default.MoreVert, contentDescription = "Options")
-                            }
-                            DropdownMenu(
-                                expanded = rowMenu,
-                                onDismissRequest = { rowMenu = false },
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("View details") },
-                                    onClick = {
-                                        rowMenu = false
-                                        detailsFor = peer
-                                    },
+        if (!batteryExempt && !batteryDismissed) {
+            item(key = "battery") {
+                BatteryPromptCard(
+                    onAllow = {
+                        try {
+                            context.startActivity(
+                                Intent(
+                                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                    Uri.parse("package:${context.packageName}"),
                                 )
-                                DropdownMenuItem(
-                                    text = { Text("Block & report") },
-                                    onClick = {
-                                        rowMenu = false
-                                        viewModel.block(peer.sessionId)
-                                    },
-                                )
-                            }
+                            )
+                        } catch (_: ActivityNotFoundException) {
+                            context.startActivity(
+                                Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                            )
                         }
+                        viewModel.dismissBatteryPrompt()
                     },
+                    onDismiss = { viewModel.dismissBatteryPrompt() },
                 )
+            }
+        }
+        if (radarOn) {
+            item(key = "nearby-header") { SectionHeader("Nearby") }
+            if (peers.isEmpty()) {
+                item(key = "scanning-row") { ScanningRow() }
+            }
+            items(sorted, key = { it.endpointId }) { peer ->
+                val dm = viewModel.dmRoomCodeFor(peer)
+                val intent = peerIntents[peer.sessionId]
+                val matches = myIntent != null && intent == myIntent
+                Card(
+                    onClick = { onOpenChat(dm, peer.displayName) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                ) {
+                    ListItem(
+                        leadingContent = { Avatar(peer.displayName, peer.sessionId) },
+                        headlineContent = {
+                            Text(
+                                peer.displayName +
+                                    (intent?.let { "  ${it.emoji}" } ?: "")
+                            )
+                        },
+                        supportingContent = {
+                            Text(
+                                when {
+                                    matches -> "Also here for ${intent!!.label} — say hi!"
+                                    intent != null -> "Here for ${intent.label}"
+                                    else -> "Tap to chat"
+                                },
+                                color = if (matches) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        },
+                        trailingContent = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                unread[dm]?.takeIf { it > 0 }?.let { Badge { Text("$it") } }
+                                var rowMenu by remember { mutableStateOf(false) }
+                                IconButton(onClick = { rowMenu = true }) {
+                                    Icon(Icons.Default.MoreVert, contentDescription = "Options")
+                                }
+                                DropdownMenu(
+                                    expanded = rowMenu,
+                                    onDismissRequest = { rowMenu = false },
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("View details") },
+                                        onClick = {
+                                            rowMenu = false
+                                            detailsFor = peer
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Block & report") },
+                                        onClick = {
+                                            rowMenu = false
+                                            viewModel.block(peer.sessionId)
+                                        },
+                                    )
+                                }
+                            }
+                        },
+                    )
+                }
+            }
+        }
+        if (recentChats.isNotEmpty()) {
+            item(key = "recent-header") { SectionHeader("Recent chats") }
+            items(recentChats, key = { "recent-" + it.roomCode }) { chat ->
+                val title = chat.peerName ?: "New chat"
+                Card(
+                    onClick = { onOpenChat(chat.roomCode, title) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                ) {
+                    ListItem(
+                        leadingContent = { Avatar(title, chat.roomCode) },
+                        headlineContent = { Text(title) },
+                        supportingContent = {
+                            Text(
+                                (if (chat.lastMine) "You: " else "") + chat.lastText,
+                                maxLines = 1,
+                            )
+                        },
+                        trailingContent = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    DateFormat.getTimeInstance(DateFormat.SHORT)
+                                        .format(Date(chat.lastTs)),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                unread[chat.roomCode]?.takeIf { it > 0 }?.let {
+                                    Badge(modifier = Modifier.padding(start = 6.dp)) { Text("$it") }
+                                }
+                            }
+                        },
+                    )
+                }
+            }
+        }
+        if (!radarOn && recentChats.isEmpty()) {
+            item(key = "off-empty") {
+                Text(
+                    "Chats you have will stay readable here even while invisible.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScanningRow() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        SonarPulse(Modifier.size(40.dp))
+        Spacer(Modifier.size(12.dp))
+        Text(
+            "Scanning for people nearby…",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun BatteryPromptCard(onAllow: () -> Unit, onDismiss: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Keep Beacon alive in background", style = MaterialTheme.typography.titleSmall)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Some phones (Samsung especially) kill background apps after a while — " +
+                    "messages stop arriving until you reopen. Exempt Beacon from battery " +
+                    "optimization to stay reachable.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onAllow) { Text("Allow") }
+                TextButton(onClick = onDismiss) { Text("Not now") }
             }
         }
     }
@@ -754,23 +971,31 @@ private fun RoomsEmptyState() {
 }
 
 @Composable
-private fun RadarOffState(onTurnOn: () -> Unit) {
-    CenteredState {
-        Icon(
-            Icons.Default.VisibilityOff,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(48.dp),
-        )
-        Spacer(Modifier.height(16.dp))
-        Text("Radar is off", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "You're invisible and can't see anyone. Nothing is shared while off.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(16.dp))
-        Button(onClick = onTurnOn) { Text("Turn radar on") }
+private fun RadarOffBanner(onTurnOn: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Default.VisibilityOff,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.size(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Radar is off — you're invisible", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "Nothing is shared. Your chats stay readable.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            TextButton(onClick = onTurnOn) { Text("Turn on") }
+        }
     }
 }

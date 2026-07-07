@@ -126,6 +126,9 @@ class ChatRepository(
         nearby.send(envelope(BeaconEnvelope.TYPE_READ, roomCode), targetsFor(roomCode))
     }
 
+    /** DM conversations for the Recent chats list, newest first. */
+    fun recentChats() = dao.recentDmChats()
+
     fun messagesFor(roomCode: String): Flow<List<ChatMessage>> =
         dao.messagesFor(roomCode).map { entities ->
             entities.map {

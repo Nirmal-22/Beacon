@@ -12,8 +12,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -79,6 +84,13 @@ private fun StepScaffold(
     }
 }
 
+private val FUN_ADJECTIVES = listOf(
+    "Cosmic", "Turbo", "Quiet", "Neon", "Mellow", "Swift", "Lucky", "Nova", "Zesty", "Echo",
+)
+private val FUN_NOUNS = listOf(
+    "Otter", "Falcon", "Panda", "Comet", "Willow", "Pixel", "Ember", "Drift", "Maple", "Sona",
+)
+
 @Composable
 private fun NameStep(identity: IdentityRepository, onNext: () -> Unit) {
     var name by rememberSaveable { mutableStateOf(identity.displayName) }
@@ -87,13 +99,20 @@ private fun NameStep(identity: IdentityRepository, onNext: () -> Unit) {
         description = "Talk to people around you — no account, no profile. " +
             "Pick a display name; everything else about you disappears when you close the app.",
     ) {
-        OutlinedTextField(
-            value = name,
-            onValueChange = { if (it.length <= 40) name = it },
-            label = { Text("Display name") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { if (it.length <= 40) name = it },
+                label = { Text("Display name") },
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(onClick = {
+                name = "${FUN_ADJECTIVES.random()} ${FUN_NOUNS.random()}"
+            }) {
+                Icon(Icons.Default.Casino, contentDescription = "Roll a name")
+            }
+        }
         Spacer(Modifier.height(24.dp))
         Button(
             onClick = {
@@ -104,6 +123,13 @@ private fun NameStep(identity: IdentityRepository, onNext: () -> Unit) {
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text("Continue")
+        }
+        TextButton(onClick = {
+            // Anonymity as a first-class starting point, not a buried toggle.
+            identity.setAnonymous(true)
+            onNext()
+        }) {
+            Text("Skip — stay anonymous")
         }
     }
 }

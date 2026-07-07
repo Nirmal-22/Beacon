@@ -3,6 +3,7 @@ package com.beacon.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.beacon.AppContainer
+import com.beacon.data.db.RecentChatRow
 import com.beacon.domain.AnonymousNames
 import com.beacon.domain.HelpBoard
 import com.beacon.domain.HelpCategory
@@ -14,8 +15,10 @@ import com.beacon.domain.RoomRegistry
 import com.beacon.model.Peer
 import com.beacon.model.RoomInfo
 import com.beacon.nearby.NearbyManager
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -39,6 +42,22 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
 
     /** How/when each peer was met, keyed by sessionId. */
     val peerMeets: StateFlow<Map<String, PeerJournal.Meet>> = container.peerJournal.meets
+
+    /** DM history, newest first — reachable even with the radar off. */
+    val recentChats: StateFlow<List<RecentChatRow>> = container.chatRepository.recentChats()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Private prosocial stat: how many people have thanked you. */
+    val helpedCount: StateFlow<Int> = container.thanksLedger.count
+
+    private val _batteryPromptDismissed =
+        MutableStateFlow(container.identityRepository.batteryPromptDismissed)
+    val batteryPromptDismissed: StateFlow<Boolean> = _batteryPromptDismissed.asStateFlow()
+
+    fun dismissBatteryPrompt() {
+        container.identityRepository.batteryPromptDismissed = true
+        _batteryPromptDismissed.value = true
+    }
 
     val status: StateFlow<NearbyManager.Status> = container.nearbyManager.status
 
@@ -123,6 +142,17 @@ class HomeViewModel(private val container: AppContainer) : ViewModel() {
     fun setAnonymous(value: Boolean) {
         container.identityRepository.setAnonymous(value)
         container.nearbyManager.refreshIdentity()
+        container.meshRouter.identityRefreshed()
+    }
+
+    val myDisplayName: String get() = container.identityRepository.displayName
+
+    fun rename(newName: String) {
+        val trimmed = newName.trim()
+        if (trimmed.isEmpty()) return
+        container.identityRepository.displayName = trimmed
+        container.nearbyManager.refreshIdentity()
+        container.meshRouter.identityRefreshed()
     }
 
     /** Create-or-join by human name; returns the room code to navigate to. */

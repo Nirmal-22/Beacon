@@ -37,13 +37,24 @@ class IdentityRepository(context: Context) : Identity {
     }
 
     override val effectiveName: String
-        get() = if (_anonymous.value) AnonymousNames.forSession(sessionId) else displayName
+        get() = if (_anonymous.value || displayName.isBlank()) {
+            // Blank names would break endpointInfo parsing on peers; users who
+            // skipped naming stay presentable via their anonymous handle.
+            AnonymousNames.forSession(sessionId)
+        } else {
+            displayName
+        }
 
     fun endpointInfo(): String = IdGen.encodeEndpointInfo(sessionId, effectiveName)
+
+    var batteryPromptDismissed: Boolean
+        get() = prefs.getBoolean(KEY_BATTERY_PROMPT, false)
+        set(value) = prefs.edit { putBoolean(KEY_BATTERY_PROMPT, value) }
 
     private companion object {
         const val KEY_DISPLAY_NAME = "display_name"
         const val KEY_ONBOARDING_COMPLETE = "onboarding_complete"
         const val KEY_ANONYMOUS = "anonymous"
+        const val KEY_BATTERY_PROMPT = "battery_prompt_dismissed"
     }
 }

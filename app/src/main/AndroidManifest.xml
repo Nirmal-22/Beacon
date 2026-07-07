@@ -31,6 +31,10 @@
     <!-- Haptic tick when someone new appears nearby -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- One-time user-approved exemption so OEM battery managers (Samsung!)
+         don't silently kill the mesh while backgrounded -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
     <!-- Foreground service (discovery while backgrounded) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />

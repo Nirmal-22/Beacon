@@ -8,6 +8,7 @@ import com.beacon.data.IdentityRepository
 import com.beacon.data.LocationSharer
 import com.beacon.data.MeshRouter
 import com.beacon.data.SocialAlerts
+import com.beacon.data.ThanksLedger
 import com.beacon.data.db.BeaconDatabase
 import com.beacon.domain.DmGate
 import com.beacon.domain.HelpBoard
@@ -56,6 +57,8 @@ class AppContainer(appContext: Context) {
 
     val peerJournal = PeerJournal()
 
+    val thanksLedger = ThanksLedger(appContext)
+
     private val messagesNotifier = MessagesNotifier(appContext) { roomCode, sender ->
         if (roomCode.startsWith("dm:")) sender
         else roomRegistry.rooms.value[roomCode]?.name ?: sender
@@ -70,6 +73,7 @@ class AppContainer(appContext: Context) {
         help = helpBoard,
         locations = locationBoard,
         journal = peerJournal,
+        thanks = thanksLedger,
         scope = appScope,
         alerts = object : SocialAlerts {
             override fun onIcebreaker(peer: Peer, emoji: String, dmRoomCode: String) {
@@ -78,6 +82,10 @@ class AppContainer(appContext: Context) {
 
             override fun onHelpPost(post: HelpBoard.HelpPost) {
                 messagesNotifier.onHelpPost(post)
+            }
+
+            override fun onThanks(senderName: String) {
+                messagesNotifier.onThanks(senderName)
             }
         },
         isBlocked = blockList::isBlocked,

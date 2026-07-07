@@ -54,7 +54,7 @@ import org.osmdroid.views.overlay.Marker
  *  - your own dot: local-only unless the share toggle is on.
  */
 @Composable
-fun MapTab(viewModel: HomeViewModel, mapView: MapView) {
+fun MapTab(viewModel: HomeViewModel, mapView: MapView, radarOn: Boolean) {
     val context = LocalContext.current
     val sharing by viewModel.mapSharing.collectAsStateWithLifecycle()
     val pins by viewModel.mapPins.collectAsStateWithLifecycle()
@@ -152,14 +152,18 @@ fun MapTab(viewModel: HomeViewModel, mapView: MapView) {
                         Column(Modifier.weight(1f)) {
                             Text("Show me on the map", style = MaterialTheme.typography.bodyMedium)
                             Text(
-                                if (sharing) "People nearby can see your pin"
-                                else "Your dot is only visible to you",
+                                when {
+                                    !radarOn -> "Turn the radar on to be seen"
+                                    sharing -> "People nearby can see your pin"
+                                    else -> "Your dot is only visible to you"
+                                },
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         Switch(
-                            checked = sharing,
+                            checked = sharing && radarOn,
+                            enabled = radarOn,
                             onCheckedChange = { enable ->
                                 when {
                                     !enable -> viewModel.setMapSharing(false)

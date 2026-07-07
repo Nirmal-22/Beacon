@@ -70,5 +70,8 @@ data class BeaconEnvelope(
          * sender stopped sharing and their pin must be removed (map feature).
          */
         const val TYPE_LOCATION = "LOCATION"
+
+        /** "You helped me" — receiver bumps their private helped-count. */
+        const val TYPE_THANKS = "THANKS"
     }
 }

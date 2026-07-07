@@ -36,4 +36,26 @@ interface MessageDao {
     /** Own messages the peer never ACKed — candidates for redelivery. */
     @Query("SELECT * FROM messages WHERE roomCode = :roomCode AND isMine = 1 AND delivered = 0")
     suspend fun undelivered(roomCode: String): List<MessageEntity>
+
+    /**
+     * One row per DM conversation, newest first — the Recent chats list that
+     * keeps history reachable while the radar (and thus the peer list) is off.
+     */
+    @Query(
+        """
+        SELECT m.roomCode AS roomCode,
+               m.text AS lastText,
+               m.timestamp AS lastTs,
+               m.isMine AS lastMine,
+               (SELECT senderName FROM messages
+                WHERE roomCode = m.roomCode AND isMine = 0
+                ORDER BY timestamp DESC LIMIT 1) AS peerName
+        FROM messages m
+        WHERE m.roomCode LIKE 'dm:%'
+          AND m.timestamp = (SELECT MAX(timestamp) FROM messages WHERE roomCode = m.roomCode)
+        GROUP BY m.roomCode
+        ORDER BY lastTs DESC
+        """
+    )
+    fun recentDmChats(): Flow<List<RecentChatRow>>
 }

@@ -67,6 +67,11 @@ class ChatViewModel(
         dmPeerId?.let { container.meshRouter.replyIcebreaker(it, accepted) }
     }
 
+    /** One-tap gratitude: bumps their private helped-count. */
+    fun sayThanks() {
+        dmPeerId?.let { container.meshRouter.sendThanks(it) }
+    }
+
     fun dmPeerIntent(): IntentTag? =
         dmPeerId?.let { container.intentBoard.peerIntents.value[it] }
 

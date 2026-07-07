@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.onEach
 interface SocialAlerts {
     fun onIcebreaker(peer: Peer, emoji: String, dmRoomCode: String)
     fun onHelpPost(post: HelpBoard.HelpPost)
+    fun onThanks(senderName: String)
 }
 
 /**
@@ -36,6 +37,7 @@ class MeshRouter(
     private val help: HelpBoard,
     private val locations: LocationBoard,
     private val journal: PeerJournal,
+    private val thanks: ThanksLedger? = null,
     scope: CoroutineScope,
     private val alerts: SocialAlerts? = null,
     private val isBlocked: (sessionId: String) -> Boolean = { false },
@@ -112,8 +114,17 @@ class MeshRouter(
 
             BeaconEnvelope.TYPE_LOCATION ->
                 locations.onRemoteLocation(env.senderId, env.senderName, env.body)
+
+            BeaconEnvelope.TYPE_THANKS -> {
+                thanks?.increment()
+                alerts?.onThanks(env.senderName)
+            }
         }
     }
+
+    /** Gratitude, one tap: bumps their private "helped" count. */
+    fun sendThanks(peerSessionId: String) =
+        sendToSession(peerSessionId, BeaconEnvelope.TYPE_THANKS, null)
 
     fun joinRoom(nameOrCode: String) {
         if (rooms.join(nameOrCode)) broadcastAnnounce()
@@ -123,6 +134,12 @@ class MeshRouter(
     fun joinRoomByCode(code: String, name: String) {
         if (rooms.joinWithCode(code, name)) broadcastAnnounce()
     }
+
+    /**
+     * Rename / anonymous toggle: peers learn names from envelopes, so resend
+     * the room snapshot too or member lists keep showing the old name.
+     */
+    fun identityRefreshed() = broadcastAnnounce()
 
     fun leaveRoom(code: String) {
         if (rooms.leave(code)) broadcastAnnounce()

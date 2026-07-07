@@ -109,7 +109,20 @@ class MessagesNotifier(
         manager.notify(post.id.hashCode(), notification)
     }
 
+    /** Someone tapped "they helped" — a rare, purely good notification. */
+    fun onThanks(senderName: String) {
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle("🙏 $senderName says you helped!")
+            .setContentText("Your helped-count went up. Nobody else sees it — but you know.")
+            .setAutoCancel(true)
+            .setCategory(NotificationCompat.CATEGORY_SOCIAL)
+            .build()
+        manager.notify(THANKS_ID, notification)
+    }
+
     private companion object {
         const val CHANNEL_ID = "beacon_messages"
+        const val THANKS_ID = 7_777
     }
 }
